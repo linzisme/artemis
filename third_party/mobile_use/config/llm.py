@@ -25,7 +25,7 @@ from typing import Any, Literal
 
 import google.auth
 from google.auth.exceptions import DefaultCredentialsError
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, model_validator
 
 from artemis.config.constants import AgentNode, LLMProvider, LLMUtilsNode
 from artemis.config.settings import settings
@@ -66,7 +66,11 @@ class LLM(BaseModel):
 
     def validate_provider(self, name: str) -> None:
         """Ensure the required API key or credentials exist in settings for this provider."""
-        if self.provider == "openai":
+        if self.provider == "codex":
+            from artemis.llm.codex import check_codex_login
+
+            check_codex_login()
+        elif self.provider == "openai":
             if not settings.OPENAI_API_KEY:
                 raise Exception(f"{name} requires OPENAI_API_KEY in .env")
         elif self.provider == "google":
@@ -94,6 +98,12 @@ class LLMWithFallback(LLM):
     fallback: LLM
     fix_model: str | None = None
     timeout: float | None = None
+
+    @model_validator(mode="after")
+    def subscription_fallback(self):
+        if self.provider == "codex" and self.fallback.provider != "codex":
+            raise ValueError("Codex subscription nodes cannot use an API fallback")
+        return self
 
     def __str__(self) -> str:
         return f"{self.provider}/{self.model} (fallback: {self.fallback})"

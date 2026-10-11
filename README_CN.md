@@ -318,3 +318,7 @@ ARTEMIS 提供两种运行模式以适应不同的自动化需求：
 非 Google 所有的代码位于 [`third_party/`](third_party/) 目录下，每个上游项目一个子目录，并各自附带 `LICENSE` 与 `METADATA`。
 
 - [`third_party/mobile_use`](third_party/mobile_use/) – 来自 Minitap, Inc. 的 [mobile-use](https://github.com/minitap-ai/mobile-use) 的部分代码，Apache License 2.0。
+
+## Codex ChatGPT 订阅（可选）
+
+通过官方 Codex CLI 已保存的 ChatGPT 登录进行模型推理，无需模型 API Key。参见[配置、验收与限制](docs/codex-chatgpt.md)。原有 API 模式保持不变。

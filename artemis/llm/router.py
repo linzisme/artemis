@@ -39,6 +39,7 @@ class ModelProvider(StrEnum):
     GEMINI = "google"
     VERTEX_AI = "vertexai"
     OPENAI = "openai"
+    CODEX = "codex"
     ANTHROPIC = "anthropic"
     OPENROUTER = "openrouter"
     XAI = "xai"
@@ -67,6 +68,7 @@ class ModelProvider(StrEnum):
             "vertexai": cls.VERTEX_AI,
             "vertex": cls.VERTEX_AI,
             "openai": cls.OPENAI,
+            "codex": cls.CODEX,
             "anthropic": cls.ANTHROPIC,
             "claude": cls.ANTHROPIC,
             "openrouter": cls.OPENROUTER,
@@ -220,6 +222,21 @@ class ModelFactory:
             return FakeChatModel(delay_s=delay)
 
         provider = ModelProvider.from_string(endpoint.provider)
+
+        if provider == ModelProvider.CODEX:
+            from artemis.llm.codex import CodexChatModel
+
+            if endpoint.api_key or endpoint.api_base:
+                raise ValueError("codex uses ChatGPT CLI login, not API credentials/endpoints")
+            if endpoint.temperature or endpoint.max_tokens is not None or endpoint.enable_grounding:
+                raise ValueError(
+                    "codex does not support temperature, max_tokens or Google grounding"
+                )
+            return CodexChatModel(
+                model_name=endpoint.model_name,
+                timeout_seconds=endpoint.timeout_seconds,
+                reasoning_effort=endpoint.reasoning_effort,
+            )
 
         if provider == ModelProvider.GOOGLE:
             _patch_langchain_google_genai()

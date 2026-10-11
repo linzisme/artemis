@@ -28,6 +28,7 @@ from pathlib import Path
 import re
 import sys
 import time
+from types import SimpleNamespace
 from typing import Any, TypeVar
 from uuid import uuid4
 
@@ -937,6 +938,16 @@ def _resolve_endpoint(
         include_thoughts=_get_val(cfg, "include_thoughts", bool),
         enable_grounding=_get_val(cfg, "enable_grounding", bool) or False,
     )
+
+
+def get_memory_llm(ctx=None, model_name: str | None = None, *, use_fallback=False):
+    """Resolve memory through the summarizer role, retaining its provider."""
+    ctx = ctx if ctx is not None else SimpleNamespace(llm_config=get_default_llm_config())
+    endpoint = _resolve_endpoint(ctx, "summarizer", use_fallback=use_fallback)
+    updates = {"temperature": 0.0}
+    if model_name:
+        updates["model_name"] = model_name
+    return ModelFactory.get_model(endpoint.model_copy(update=updates))
 
 
 def _get_llm(

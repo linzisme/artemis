@@ -1,0 +1,30 @@
+{
+  // Opt-in subscription profile. Use an available model shown by your CLI.
+  "default": {
+    "provider": "codex",
+    "model": "gpt-6.1-sol",
+    "timeout": 180,
+    "reasoning_effort": "low",
+    // Required by ARTEMIS's config schema. Codex errors are terminal, so this
+    // same-provider placeholder does not retry quota/auth errors or call an API.
+    "fallback": { "provider": "codex", "model": "gpt-6.1-sol" }
+  },
+  "nodes": {},
+  "agent": {
+    "flash": {
+      "max_turns": 12,
+      "explorer_mode": "pro",
+      "step_summarizer": { "enabled": true, "model": "gpt-6.1-sol" }
+    },
+    "pro": {
+      "explorer": { "mode": "pro" },
+      "video_analyzer": { "enabled": false }
+    },
+    "memory": { "chunking": { "model": "gpt-6.1-sol" } },
+    "video_analyzer": { "enabled": false, "enable_ledger": false },
+    "explorer": { "default_version": "pro", "caching": false },
+    "denylisted_tools": {
+      "explorer": ["ask_perception_tool", "detect_objects", "get_ocr_list", "ask_image_processor"]
+    }
+  }
+}

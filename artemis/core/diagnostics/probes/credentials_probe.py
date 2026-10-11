@@ -49,6 +49,31 @@ class LLMCredentialsProbe(BaseProbe):
     async def probe(self) -> ProbeResult:
         import os
 
+        from artemis.config.llm import get_default_llm_config
+
+        # Subscription mode has no key to display or validate through an API.
+        if get_default_llm_config().operator.provider == "codex":
+            import asyncio
+            from artemis.llm.codex import CodexError, check_codex_login
+
+            try:
+                await asyncio.to_thread(check_codex_login)
+                status, summary = ProbeStatus.PASS, "Codex ChatGPT login present"
+                description = "CLI login verified; model availability and remaining quota require a live call."
+            except CodexError as error:
+                status, summary = ProbeStatus.FAIL, "Codex login required"
+                description = str(error)
+            return ProbeResult(
+                id=self.probe_id,
+                category=self.category,
+                title="Codex subscription",
+                status=status,
+                is_blocker=True,
+                summary=summary,
+                description=description,
+                metadata={"provider": "codex", "auth": "chatgpt"},
+            )
+
         from artemis.config.settings import is_placeholder_key
 
         gemini_key = settings.get_api_key("google")

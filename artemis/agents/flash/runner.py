@@ -279,6 +279,9 @@ class FlashRunner:
 
     def _init_llm(self):
         """Initializes the Universal LLM via the Service Layer."""
+        operator = getattr(getattr(self.ctx, "llm_config", None), "operator", None)
+        if getattr(operator, "provider", None) == "codex":
+            return get_llm(self.ctx, name="operator")
         try:
             return get_llm(self.ctx, name="operator")
         except Exception as e:

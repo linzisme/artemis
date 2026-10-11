@@ -121,6 +121,8 @@ class LLMConfig(LLMConfigBase):
             if item == "history_analyzer":
                 return self.operator
             elif item in ("validator_pixel_safety_net", "planner_validation"):
+                if self.operator.provider == "codex":
+                    return self.operator
                 # Both are cheap, high-frequency judges: the pixel safety net
                 # runs before actions, the planner validator after every
                 # milestone edit. They share one lightweight default.
@@ -193,6 +195,17 @@ def _expand_default_into_nodes(config_dict: dict) -> dict:
                     util_cfg[k] = v
         utils_dict[util] = util_cfg
     result["utils"] = utils_dict
+
+    # Optional judges otherwise use hard-coded Gemini defaults. Preserve API
+    # defaults, but inherit subscription routing and honor explicit overrides.
+    for node in (
+        "history_analyzer",
+        "validator_pixel_safety_net",
+        "planner_validation",
+        "output_analyzer",
+    ):
+        if default_model_cfg.get("provider") == "codex" or node in nodes_override:
+            result[node] = {**default_model_cfg, **nodes_override.get(node, {})}
 
     return result
 

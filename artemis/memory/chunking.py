@@ -323,17 +323,17 @@ class StepCapsuleLens(StepLens):
 
     def _get_llm(self):
         if self._llm is None:
-            from artemis.services.llm import get_google_llm
+            from artemis.services.llm import get_memory_llm
 
-            self._llm = get_google_llm(model_name=self._model_name, temperature=0.0)
+            self._llm = get_memory_llm(self._ctx, model_name=self._model_name)
         return self._llm
 
     def _get_fallback_llm(self):
         if self._fallback_llm is None and self._fallback_model_name:
-            from artemis.services.llm import get_google_llm
+            from artemis.services.llm import get_memory_llm
 
-            self._fallback_llm = get_google_llm(
-                model_name=self._fallback_model_name, temperature=0.0
+            self._fallback_llm = get_memory_llm(
+                self._ctx, model_name=self._fallback_model_name, use_fallback=True
             )
         return self._fallback_llm
 
@@ -953,8 +953,8 @@ class HistoryChunkManager:
         """Fallback model for capsule generation when `chunking.model` is down.
 
         Resolved from the LLM config's summarizer role (which inherits the
-        global default fallback unless overridden). Only same-provider (google)
-        fallbacks apply — the capsule lens rides the raw google model path.
+        global default fallback unless overridden). Only same-provider
+        fallbacks apply; memory keeps the configured summarizer provider.
         """
         try:
             llm_cfg = getattr(ctx, "llm_config", None) if ctx is not None else None
@@ -965,7 +965,8 @@ class HistoryChunkManager:
             fallback = getattr(getattr(llm_cfg, "summarizer", None), "fallback", None)
             provider = str(getattr(fallback, "provider", "") or "")
             model = getattr(fallback, "model", None)
-            if model and is_google_provider(provider) and model != self._model_name:
+            primary = getattr(getattr(llm_cfg, "summarizer", None), "provider", "google")
+            if model and provider == primary and model != self._model_name:
                 return str(model)
         except Exception as exc:
             logger.debug(f"Capsule fallback model resolution skipped: {exc}", exc_info=True)

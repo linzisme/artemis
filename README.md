@@ -320,3 +320,7 @@ This project is licensed under the [Apache License 2.0](LICENSE).
 Code not owned by Google lives under [`third_party/`](third_party/), one directory per upstream project, each with its own `LICENSE` and `METADATA`.
 
 - [`third_party/mobile_use`](third_party/mobile_use/) – portions of [mobile-use](https://github.com/minitap-ai/mobile-use) by Minitap, Inc., Apache License 2.0.
+
+## Codex ChatGPT subscription (optional)
+
+The opt-in `codex` provider uses the official Codex CLI and an existing ChatGPT login. See [setup, validation and limitations](docs/codex-chatgpt.md). Existing API providers remain available.
