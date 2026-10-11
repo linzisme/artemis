@@ -164,6 +164,10 @@ class VisualStepSummarizer(StepMemoryService):
         # Initialize lightweight VLM: prioritize explicit model_name
         target_model = model_name or "gemini-2.5-flash-lite"
         self._model_name = target_model
+        if getattr(ctx, "llm_config", None) is None:
+            from artemis.config.llm import get_default_llm_config
+
+            ctx.llm_config = get_default_llm_config()
         summarizer = getattr(getattr(ctx, "llm_config", None), "summarizer", None)
         if getattr(summarizer, "provider", None) == "codex":
             self._llm = get_memory_llm(ctx, model_name=model_name)

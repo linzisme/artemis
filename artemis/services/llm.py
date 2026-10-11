@@ -941,8 +941,14 @@ def _resolve_endpoint(
 
 
 def get_memory_llm(ctx=None, model_name: str | None = None, *, use_fallback=False):
-    """Resolve memory through the summarizer role, retaining its provider."""
+    """Use subscription memory for Codex; preserve the legacy Google API path."""
     ctx = ctx if ctx is not None else SimpleNamespace(llm_config=get_default_llm_config())
+    config = getattr(ctx, "llm_config", None)
+    if config is None:
+        config = get_default_llm_config()
+        ctx.llm_config = config
+    if getattr(getattr(config, "summarizer", None), "provider", None) != "codex":
+        return get_google_llm(model_name=model_name or "gemini-3.8-flash", temperature=0.0)
     endpoint = _resolve_endpoint(ctx, "summarizer", use_fallback=use_fallback)
     updates = {"temperature": 0.0}
     if model_name:

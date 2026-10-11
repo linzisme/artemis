@@ -953,8 +953,8 @@ class HistoryChunkManager:
         """Fallback model for capsule generation when `chunking.model` is down.
 
         Resolved from the LLM config's summarizer role (which inherits the
-        global default fallback unless overridden). Only same-provider
-        fallbacks apply; memory keeps the configured summarizer provider.
+        global default fallback unless overridden). Codex stays on its own
+        provider; API profiles retain the legacy Google-only fallback.
         """
         try:
             llm_cfg = getattr(ctx, "llm_config", None) if ctx is not None else None
@@ -966,7 +966,10 @@ class HistoryChunkManager:
             provider = str(getattr(fallback, "provider", "") or "")
             model = getattr(fallback, "model", None)
             primary = getattr(getattr(llm_cfg, "summarizer", None), "provider", "google")
-            if model and provider == primary and model != self._model_name:
+            compatible = (primary == "codex" and provider == "codex") or (
+                primary != "codex" and is_google_provider(provider)
+            )
+            if model and compatible and model != self._model_name:
                 return str(model)
         except Exception as exc:
             logger.debug(f"Capsule fallback model resolution skipped: {exc}", exc_info=True)

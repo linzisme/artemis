@@ -303,3 +303,33 @@ def test_example_profile_memory_stays_on_subscription(monkeypatch):
     assert get_memory_llm(ctx, "gpt-6.1-sol")._llm_type == "codex-chatgpt"
     assert VisualStepSummarizer(ctx, "gpt-6.1-sol")._llm._llm_type == "codex-chatgpt"
     assert StepCapsuleLens("gpt-6.1-sol", ctx=ctx)._get_llm()._llm_type == "codex-chatgpt"
+    lazy_ctx = SimpleNamespace(llm_config=None, data_engine=None)
+    assert VisualStepSummarizer(lazy_ctx)._llm._llm_type == "codex-chatgpt"
+    assert (
+        VisualStepSummarizer(SimpleNamespace(llm_config=None), "gpt-6.1-sol")._llm._llm_type
+        == "codex-chatgpt"
+    )
+
+
+@pytest.mark.parametrize("provider", ["openai", "anthropic", "google"])
+def test_api_profiles_keep_legacy_google_memory(provider, monkeypatch):
+    from types import SimpleNamespace
+    from pydantic import SecretStr
+    from artemis.config.settings import settings
+    from artemis.services.llm import get_memory_llm
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    # Constructor only: this inert key is never sent to any service.
+    for name in (
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", SecretStr("unit-test-no-network"))
+    ctx = SimpleNamespace(llm_config=SimpleNamespace(summarizer=SimpleNamespace(provider=provider)))
+    model = get_memory_llm(ctx, "gemini-3.8-flash")
+    assert isinstance(model, ChatGoogleGenerativeAI)
