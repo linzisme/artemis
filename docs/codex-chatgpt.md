@@ -53,4 +53,6 @@ make typecheck
 
 离线 CLI 替身用于错误与清理测试，和 `--live` 的真实订阅验收明确分开。真实探针覆盖 Operator 的动作声明／返回接口、Explorer 的实际通用循环与 Checker schema，不声称完整 Flash／Pro 手机流程通过。
 
+另已完成专用 Android 模拟器 Settings→Battery 的真实 Flash 与 Pro strict 流程，包含独立 ADB、电量及设置未变核验；结果与范围见[端到端验收记录](codex-e2e-validation.md)。这不代表其它 App 或长期稳定性已经通过。
+
 官方依据：[认证](https://learn.chatgpt.com/docs/auth)、[非交互调用和结构化输出](https://learn.chatgpt.com/docs/non-interactive-mode)、[CLI 配置](https://learn.chatgpt.com/docs/config-file/config-reference)。App Server 动态工具仍是实验接口，本实现不依赖它。

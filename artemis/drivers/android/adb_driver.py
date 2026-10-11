@@ -384,7 +384,9 @@ class AndroidAdbDriver(BaseDeviceDriver):
 
     async def launch_app(self, package_name: str) -> bool:
         try:
-            cmd = f"monkey -p {package_name} -c android.intent.category.LAUNCHER 1"
+            # Launch-only runs need no random system-key events. Monkey's
+            # default factor aborts on emulators without physical keys.
+            cmd = f"monkey --pct-syskeys 0 -p {package_name} -c android.intent.category.LAUNCHER 1"
             await asyncio.to_thread(self.device.shell, cmd)
             return True
         except Exception as e:

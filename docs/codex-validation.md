@@ -2,6 +2,8 @@
 
 日期：2026-10-11。基线 `351ca8422f7b5b54e80a9c1ce03a222e02415b6b`。macOS arm64，Python 3.12.15，官方 Codex CLI 0.161.0，GitHub CLI 确认个人 fork 所有者 `linzisme`。
 
+后续已完成专用 Android 模拟器的 Flash 与 Pro strict 真实 Settings→Battery 验收，两条路径均通过；详见[端到端验收记录](codex-e2e-validation.md)。下文保留第一阶段合成探针的范围与结果。
+
 ## 真实订阅调用
 
 CLI `login status` 返回 `Logged in using ChatGPT`。首次用旧模型 `gpt-5.4` 试探时被官方明确拒绝；随后依据 CLI 返回的可用模型目录选择 `gpt-6.1-sol`。未使用 API Key、第三方代理协议或从 auth 文件提取令牌。
