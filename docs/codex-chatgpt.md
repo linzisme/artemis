@@ -2,6 +2,8 @@
 
 `codex` 是独立 provider，原 `openai` 等 API provider 保持兼容。它调用官方 CLI，不把网页登录令牌转换成 API Key，也不连接第三方订阅代理。
 
+本机迁移到 Projects 后的已实测命令、服务状态和证据位置，见[本地使用与迁移](codex-local-usage.md)。
+
 ## 启动
 
 先自行安装官方 Codex CLI 并登录 ChatGPT。本实现按 CLI **0.161.0** 的 flags 验证；旧版本缺少 flags 时会失败，不降级到 API。

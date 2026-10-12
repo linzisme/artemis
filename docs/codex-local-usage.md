@@ -73,4 +73,16 @@ asyncio.run(
 - 相关回归 48 passed；MCP stdio 初始化和 5 个工具发现通过。
 - 完整隔离回归：2461 passed、89 failed、7 skipped、8 deselected。相对原基线没有新增失败，仍非全绿；本次在获准访问 Projects 的宿主环境运行，不能直接将计数差异当成代码修复收益。
 - 新目录实际 CLI Flash smoke：2026-10-12 01:34:29–01:35:43 UTC，exit 0；Battery / 100% 与系统电量一致，无 crash/ANR，三类设置完全未变。7 次实际模型调用（4 次导航决策、3 次摘要），来源为 Codex 订阅；未再重复昨日 Pro 验收。
-- lint、格式及核心类型检查通过。MATT 双轴复核结论将在完成后追加。
+- lint、格式、质量检查及核心类型检查通过。
+- 两项旧失败在本次环境中不再出现：`test_darwin_platform_paths` 与 `test_mcp_stdio_handshake_immediate_input`。没有新增失败。
+- 收尾时新版无常驻进程，旧服务 PID 63048 仍监听 `127.0.0.1:8000`；专用模拟器保持运行，官方 CLI 仍为 ChatGPT 登录。
+
+## Standards
+
+独立只读复核 `61ab592...2a54732`：0 项硬违规，0 项代码异味建议。依据根目录 `AGENTS.md`、仓库 `CONTRIBUTING.md` 和 MATT 基线；本地运行隔离职责明确，未新增无需求抽象。
+
+## Spec
+
+独立只读复核：0 项发现。源回退、目标 editable 路径、独立运行状态、无新增服务/权限、真实 CLI smoke 和 MCP 握手均有证据，文档正确区分已验证范围。
+
+两轴各 0 项发现；无待处理 Review 阻碍。
