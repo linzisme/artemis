@@ -119,3 +119,6 @@ Thumbs.db
 
 # Isolated Codex subscription profile runtime data
 .codex-artemis-state/
+
+# Local migration and device validation evidence
+.local-validation/
