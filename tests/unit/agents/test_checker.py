@@ -32,7 +32,7 @@ from artemis.agents.checker.checker import (
 )
 from artemis.context import ArtemisContext, ExecutionSetup
 from artemis.core.tool_failure import ToolFailure
-from artemis.graph.checkpoints import EvidenceAnchor
+from artemis.graph.checkpoints import EvidenceAnchor, compute_test_summary
 from artemis.utils.plan_grammar import CheckItem
 
 
@@ -138,6 +138,93 @@ def test_normalize_report_downgrades_vague_failures_and_fills_missing():
     assert by_text[("verify", "v1")].status == "inconclusive"
     # Missing item gets an inconclusive verdict, never a silent pass
     assert by_text[("assert", "a1")].status == "inconclusive"
+
+
+@pytest.mark.parametrize("kind,when", [("verify", "on_complete"), ("assert", "at_end")])
+@pytest.mark.parametrize("bullet", ["", "- "])
+@pytest.mark.parametrize("status", ["passed", "failed", "inconclusive"])
+def test_normalize_report_matches_rendered_label_without_changing_verdict(
+    kind, when, bullet, status
+):
+    item = _ci(kind=kind, when=when, text='Battery title is "Battery"')
+    verdict = CheckVerdict(
+        item_text=f"{bullet}[{kind}] ({when}) {item.text}",
+        kind=kind,
+        status=status,
+        evidence="Screen observation",
+        suggestion="Keep the original suggestion",
+    )
+    report = CheckReport(verdicts=[verdict], unmet_subgoals=["unfinished goal"])
+    normalized = _normalize_report(report, [item])
+    assert len(normalized.verdicts) == 1
+    assert normalized.verdicts[0].model_dump() == {**verdict.model_dump(), "item_text": item.text}
+    assert normalized.unmet_subgoals == report.unmet_subgoals
+    assert report.verdicts[0].item_text != item.text  # Do not mutate the raw result.
+
+
+@pytest.mark.parametrize(
+    "kind,text",
+    [
+        ("assert", "[verify] (on_complete) Battery is visible"),
+        ("verify", "[assert] (on_complete) Battery is visible"),
+        ("verify", "[verify] (at_end) Battery is visible"),
+        ("verify", "[verify] (on_complete) battery is visible"),
+        ("verify", "[verify] (on_complete) Battery is visible."),
+        ("verify", "[verify] (on_complete) Battery is not visible"),
+        ("verify", "[verify] (on_complete) Battery is visible "),
+        ("verify", "[verify] (on_complete) Unknown check"),
+    ],
+)
+def test_normalize_report_does_not_fuzzily_match_labels(kind, text):
+    item = _ci(text="Battery is visible")
+    report = CheckReport(
+        verdicts=[CheckVerdict(item_text=text, kind=kind, status="passed", evidence="e")]
+    )
+    normalized = _normalize_report(report, [item])
+    expected = [v for v in normalized.verdicts if (v.kind, v.item_text) == (item.kind, item.text)]
+    assert len(expected) == 1
+    assert expected[0].status == "inconclusive"
+    assert expected[0].evidence == "no verdict produced for this item"
+
+
+def test_normalize_report_prefers_literal_check_text_over_another_items_label():
+    plain = _ci(text="Battery is visible")
+    literal = _ci(text="[verify] (on_complete) Battery is visible")
+    report = CheckReport(
+        verdicts=[
+            CheckVerdict(item_text=literal.text, kind="verify", status="passed", evidence="e")
+        ]
+    )
+    normalized = _normalize_report(report, [plain, literal])
+    by_text = {v.item_text: v.status for v in normalized.verdicts}
+    assert by_text == {plain.text: "inconclusive", literal.text: "passed"}
+
+
+def test_normalized_labels_do_not_inflate_totals_or_hide_assert_failure():
+    items = [_ci(text="Battery is visible"), _ci(kind="assert", when="at_end", text="No crash")]
+    report = CheckReport(
+        verdicts=[
+            CheckVerdict(
+                item_text="[verify] (on_complete) Battery is visible",
+                kind="verify",
+                status="passed",
+                evidence="visible",
+            ),
+            CheckVerdict(
+                item_text="[assert] (at_end) No crash",
+                kind="assert",
+                status="failed",
+                evidence="crash dialog",
+            ),
+            CheckVerdict(
+                item_text="No crash", kind="assert", status="passed", evidence="later screen"
+            ),
+        ]
+    )
+    normalized = _normalize_report(report, items)
+    summary = compute_test_summary(items, [v.model_dump() for v in normalized.verdicts])
+    assert (summary.passed, summary.failed, summary.inconclusive, summary.unchecked) == (1, 1, 0, 0)
+    assert summary.failed_items[0]["evidence"] == "crash dialog"
 
 
 # --- Assembly: prompt segments x entry x content x config (§8 item 18) ---------------

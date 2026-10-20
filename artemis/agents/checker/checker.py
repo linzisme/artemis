@@ -80,7 +80,12 @@ class CheckVerdict(BaseModel):
     """One check item's verdict. The verdict value is never altered by the
     release decision (fail-open affects release only)."""
 
-    item_text: str = Field(description="The check line's text, quoted verbatim.")
+    item_text: str = Field(
+        description=(
+            "The check item's text, quoted verbatim, excluding the display-only "
+            "bullet and [verify]/[assert] (on_complete)/(at_end) prefix."
+        )
+    )
     kind: Literal["verify", "assert"]
     status: Literal["passed", "failed", "inconclusive"]
     evidence: str = Field(
@@ -397,10 +402,14 @@ def _format_user_guidance(ctx: ArtemisContext, steps: list[dict] | None = None) 
     return "\n".join(lines) or "(none)"
 
 
+def _check_item_label(ci) -> str:
+    return f"[{ci.kind}] ({ci.when}) {ci.text}"
+
+
 def _format_check_items(check_items: list) -> str:
     lines = []
     for ci in check_items:
-        lines.append(f"- [{ci.kind}] ({ci.when}) {ci.text}")
+        lines.append(f"- {_check_item_label(ci)}")
     return "\n".join(lines) if lines else "(none)"
 
 
@@ -432,8 +441,22 @@ async def _structured_report(llm, messages) -> CheckReport:
 def _normalize_report(report: CheckReport, check_items: list) -> CheckReport:
     """Node-side hygiene: vague failed verdicts downgrade to inconclusive; every
     expected item gets a verdict (missing ones are inconclusive)."""
+    declared = {(ci.kind, ci.text) for ci in check_items}
+    labels: dict[tuple[str, str], set[str]] = {}
+    for ci in check_items:
+        label = _check_item_label(ci)
+        for rendered in (label, f"- {label}"):
+            labels.setdefault((ci.kind, rendered), set()).add(ci.text)
+
     verdicts: list[CheckVerdict] = []
     for v in report.verdicts:
+        # Accept only exact renderings of a currently supplied item, including
+        # its kind and timing. Never strip arbitrary prefixes or fuzzily match
+        # text. A declared literal text always wins over another item's label.
+        if (v.kind, v.item_text) not in declared:
+            candidates = labels.get((v.kind, v.item_text), set())
+            if len(candidates) == 1:
+                v = v.model_copy(update={"item_text": next(iter(candidates))})
         if v.status == "failed" and not v.evidence.strip():
             verdicts.append(
                 CheckVerdict(
