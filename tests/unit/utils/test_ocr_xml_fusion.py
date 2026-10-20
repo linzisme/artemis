@@ -75,6 +75,24 @@ class TestOCRFusion(unittest.TestCase):
         xml = [{"package": "com.example.app", "bounds": "[0,0][1080,2400]"}]
         self.assertEqual(_detect_status_bar_height(xml, screen_height=2400), 96)
 
+    def test_detect_status_bar_height_ignores_full_screen_systemui_dialog(self):
+        # Issue #180: a full-screen SystemUI dialog/alert window (USB debugging
+        # authorization, crash/ANR alerts) also reports top == 0. Treating its
+        # bottom as the status bar height (2400) would shift every OCR
+        # coordinate off screen in _map_coordinates_back and silently drop all
+        # OCR results for the frame. The scan must skip it and find the real
+        # status bar even when the dialog window comes first in the dump.
+        xml = [
+            {"package": "com.android.systemui", "bounds": "[0,0][1080,2400]"},
+            {"package": "com.android.systemui", "bounds": "[0,0][1080,120]"},
+            {"package": "com.example.app", "bounds": "[0,0][1080,2400]"},
+        ]
+        self.assertEqual(_detect_status_bar_height(xml, screen_height=2400), 120)
+
+        # Only the dialog window visible: fall back to 4% of screen height.
+        xml = [{"package": "com.android.systemui", "bounds": "[0,0][1080,2400]"}]
+        self.assertEqual(_detect_status_bar_height(xml, screen_height=2400), 96)
+
     def test_crop_image_remove_status_bar(self):
         # Create a dummy image
         img = Image.new("RGB", (100, 100), color="red")

@@ -89,6 +89,10 @@ def _calculate_overlap_ratio(ocr_bounds: dict[str, int], xml_bounds: dict[str, i
 
 def _detect_status_bar_height(xml_hierarchy: list[dict[str, Any]], screen_height: int) -> int:
     """Try to detect status bar height from XML, fallback to 4% of screen height."""
+    # A status bar is a thin top-anchored strip; never taller than 12% of the
+    # screen (mirrors the top-bar bound in ui_filter._detect_fixed_system_bars).
+    max_status_bar_height = int(screen_height * 0.12)
+
     for node in xml_hierarchy:
         package = node.get("package") or node.get("packageName")
         bounds_str = node.get("bounds")
@@ -96,7 +100,13 @@ def _detect_status_bar_height(xml_hierarchy: list[dict[str, Any]], screen_height
         # Look for systemui at the top
         if package == "com.android.systemui":
             bounds = _parse_bounds(bounds_str)
-            if bounds and bounds["top"] == 0:
+            # Full-screen SystemUI dialog/alert windows (USB debugging
+            # authorization, crash/ANR alerts, ...) also report top == 0.
+            # Accepting their bottom as the "status bar height" pushes every
+            # OCR coordinate off screen in _map_coordinates_back and silently
+            # drops all OCR results for the frame, so require a plausible
+            # thin-bar height and keep scanning for the real status bar.
+            if bounds and bounds["top"] == 0 and bounds["bottom"] <= max_status_bar_height:
                 return bounds["bottom"]
 
     return int(screen_height * 0.04)
