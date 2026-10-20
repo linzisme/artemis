@@ -40,13 +40,13 @@ from artemis.mcp.action_specs import operator_shell_tool
 from artemis.services.llm import RobustChatModelWrapper
 
 
-async def probe(model_name):
+async def probe(model_name, reasoning_effort="medium"):
     model = ModelFactory.create_model(
         ModelEndpoint(
             provider=ModelProvider.CODEX,
             model_name=model_name,
             timeout_seconds=180,
-            reasoning_effort="low",
+            reasoning_effort=reasoning_effort,
         )
     )
     assert isinstance(model, CodexChatModel), "Fake models must not be used in the live probe"
@@ -139,7 +139,7 @@ async def probe(model_name):
                     "provider": "codex",
                     "model": model_name,
                     "timeout": 180,
-                    "reasoning_effort": "low",
+                    "reasoning_effort": reasoning_effort,
                     "fallback": {"provider": "codex", "model": model_name},
                 }
             }
@@ -174,6 +174,7 @@ async def probe(model_name):
     result["explorer_universal_loop"]["coords"] = candidates[0]["coords"]
     return {
         "model": model_name,
+        "reasoning_effort": reasoning_effort,
         "auth": "chatgpt",
         "device_actions_executed": False,
         "checks": result,
@@ -183,8 +184,9 @@ async def probe(model_name):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live", action="store_true", help="Allow real subscription calls")
-    parser.add_argument("--model", default="gpt-6.1-sol")
+    parser.add_argument("--model", default="gpt-6-astra")
+    parser.add_argument("--reasoning-effort", default="medium")
     args = parser.parse_args()
     if not args.live:
         parser.error("Pass --live to explicitly allow subscription calls")
-    print(json.dumps(asyncio.run(probe(args.model)), indent=2))
+    print(json.dumps(asyncio.run(probe(args.model, args.reasoning_effort)), indent=2))

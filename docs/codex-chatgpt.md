@@ -24,7 +24,7 @@ PYTHONPATH=. uv run python scripts/probe_codex_subscription.py --live
 # uv run artemis run '你的测试任务' --profile pro --device-serial <测试设备serial>
 ```
 
-示例模型为 `gpt-6.1-sol`，实际可用模型以自己的 Codex CLI 为准。修改配置时同时修改 `default.model`、同 provider fallback、Flash step summarizer 与 memory chunking 模型。未登录、额度耗尽、模型不可用、请求超时均报错；不会创建新登录或跨到 API provider。
+示例模型为 `gpt-6-astra`，reasoning effort 为 `medium`，实际可用模型以自己的 Codex CLI 为准。修改配置时同时修改 `default.model`、同 provider fallback、Flash step summarizer 与 memory chunking 模型；推理档位由 `default.reasoning_effort` 指定。探针可用 `--model`、`--reasoning-effort` 覆盖默认值。未登录、额度耗尽、模型不可用、请求超时均报错；不会创建新登录或跨到 API provider。
 
 ## 适配边界
 
@@ -58,3 +58,33 @@ make typecheck
 另已完成专用 Android 模拟器 Settings→Battery 的真实 Flash 与 Pro strict 流程，包含独立 ADB、电量及设置未变核验；结果与范围见[端到端验收记录](codex-e2e-validation.md)。这不代表其它 App 或长期稳定性已经通过。
 
 官方依据：[认证](https://learn.chatgpt.com/docs/auth)、[非交互调用和结构化输出](https://learn.chatgpt.com/docs/non-interactive-mode)、[CLI 配置](https://learn.chatgpt.com/docs/config-file/config-reference)。App Server 动态工具仍是实验接口，本实现不依赖它。
+
+## Astra / Medium 验收（2026-10-12）
+
+已将订阅 profile 的主模型、同 provider fallback、Flash step summarizer 和 memory chunking 统一为 `gpt-6-astra`，`default.reasoning_effort=medium`。探针默认值同步更新，并支持 `--reasoning-effort`。
+
+- 真实订阅探针：6/6 通过。覆盖文本、合成蓝色方块图片、双工具调用顺序及参数、工具结果续接、Checker 结构化输出、Explorer 图片坐标 `[500, 500]`。工具收据是明确标记的 dry-run fixture，不代表设备动作。
+- 设备 smoke：台北时间 10:00:46–10:02:01，专用 `artemis_api36` / `emulator-5580`，Flash，session `da45cf18-e3ee-4841-b68c-20f0a38004e4`。真实 CLI 完成 Settings→Battery，exit 0。独立 ADB XML、截图、系统电量及设置快照核验通过：Battery / 100%，前台为 Settings，未见 crash/ANR 对话框，system/secure/global 设置未变。
+- 调用审计：探针 6 次、设备 7 次，全部成功；请求均为 `gpt-6-astra` / `medium`，实际调用原 `CodexChatModel`。模型工厂护栏拒绝其它 provider、模型或 effort；官方 CLI 测试前后均为 `Logged in using ChatGPT`，未使用付费 API fallback。响应 metadata 由适配层生成，不是服务端独立模型证明。
+- 相关回归：`test_codex_provider.py`、`test_codex_local_cli.py` 共 23 passed；探针 Ruff lint/format、diff check 通过。额外直接 Pyright 检查探针有 2 项既有类型错误（`SimpleNamespace` 与 `ArtemisContext`、`dict` 与 `State`），用 HEAD 原文件复核一致，新增 0。未重跑完整测试集或 Pro strict。
+
+本机原始证据：仓内 `.local-validation/astra-medium-20261012/`（Git 忽略）。`probe-result.json` 保存探针断言结果，`probe-calls.jsonl` / `cli-calls.jsonl` 保存调用审计；`device/verification.json`、`settings-diff.json`、`final-screen.png`、`console.log` 保存设备验收。`runner.py` 仅添加调用审计和配置护栏，实际使用本地 launcher 的配置初始化及原 CLI。`smoke.py` 保存独立设备核验流程。
+
+复现探针：`PYTHONPATH=. .venv/bin/python scripts/probe_codex_subscription.py --live --model gpt-6-astra --reasoning-effort medium`。设备入口仍使用[本地运行说明](codex-local-usage.md)中的 `scripts/codex_local.py run`。
+
+结论仅覆盖此次图片/工具协议探针与 Flash Settings→Battery smoke，不代表其它 App、Pro strict 或长期稳定性已完成 Astra 验收。
+
+## Astra / Medium Pro strict 补充验收（2026-10-12）
+
+台北时间 11:13:10–11:17:22，使用同一专用 `artemis_api36` / `emulator-5580`，真实 CLI `--profile pro --verification-level strict` 执行 Settings→Battery。session：`0ab08b23-cfd4-40ef-83e2-7a014fbda407`。任务执行约 243 秒，含外部核验全程约 252 秒。
+
+- `task-result.json` 和 `run_outcome.json` 均为 completed；最终 **4 passed / 0 failed / 0 inconclusive / 0 unchecked / 0 retired**。
+- `check_ledger.jsonl`：中途 checkpoint 2 项 passed，最终审查 4 项 passed。共 6 条判定，其中包含重复审查同一检查项，不能记为 6 个独立测试通过。覆盖 Battery 标题和数字电量、观察笔记中的电量与 crash/ANR 状态、最终停留 Battery、仅导航 Settings 且不修改设置。
+- 15 次真实模型调用全部成功；主模型与预创建 fallback 均通过 `gpt-6-astra` / `medium` / `codex` 护栏，实际调用原适配器；含 Planner、Operator、摘要和 Checker 的观察工具循环。测试前后官方 CLI 均为 ChatGPT 登录，未回退付费 API。调用 metadata 仍为适配器标记，不是服务端独立模型证明。
+- 独立 ADB 核验通过：前台 Settings，Battery / 100% 与系统电量一致，未见 crash/ANR 对话框，system/secure/global 设置前后完全一致。
+
+首轮被审计护栏在 Planner 创建 fallback 时拦截：fallback 仅填写 provider/model，未显式指定 reasoning effort，解析值为 `None`；该轮未发起真实模型调用。现已在 `config/codex-chatgpt.jsonc` 的 fallback 中补齐 `reasoning_effort: medium`，保留原始失败证据，再运行上述成功验收。未放宽护栏或替换模型结果。
+
+本机证据（仓内，Git 忽略）：成功轮 `.local-validation/astra-medium-pro-20261012-retry/`，首轮 `.local-validation/astra-medium-pro-20261012/`。成功轮根目录包含 `task-result.json`、`cli-calls.jsonl`；`device/` 包含独立核验、前后截图和设置快照；Checker ledger、streams、outcome 位于 `cli-state/traces/0ab08b23-cfd4-40ef-83e2-7a014fbda407/`。
+
+本次确认该 Settings→Battery 场景的 Pro strict 中途检查和最终审查可通过 Codex 订阅完成；不外推到其它 App、复杂业务或长期稳定性。未重跑完整回归集。
