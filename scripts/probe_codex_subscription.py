@@ -40,13 +40,14 @@ from artemis.mcp.action_specs import operator_shell_tool
 from artemis.services.llm import RobustChatModelWrapper
 
 
-async def probe(model_name, reasoning_effort="medium"):
+async def probe(model_name, reasoning_effort="medium", service_tier="fast"):
     model = ModelFactory.create_model(
         ModelEndpoint(
             provider=ModelProvider.CODEX,
             model_name=model_name,
             timeout_seconds=180,
             reasoning_effort=reasoning_effort,
+            service_tier=service_tier,
         )
     )
     assert isinstance(model, CodexChatModel), "Fake models must not be used in the live probe"
@@ -61,6 +62,7 @@ async def probe(model_name, reasoning_effort="medium"):
     text = await measure("text", model.ainvoke("Reply exactly ARTEMIS_CODEX_OK."))
     assert text.content.strip() == "ARTEMIS_CODEX_OK"
     result["text"]["usage"] = text.usage_metadata
+    result["text"]["requested_parameters"] = text.response_metadata
 
     image = Image.new("RGB", (400, 400), "white")
     draw = ImageDraw.Draw(image)
@@ -140,7 +142,13 @@ async def probe(model_name, reasoning_effort="medium"):
                     "model": model_name,
                     "timeout": 180,
                     "reasoning_effort": reasoning_effort,
-                    "fallback": {"provider": "codex", "model": model_name},
+                    "service_tier": service_tier,
+                    "fallback": {
+                        "provider": "codex",
+                        "model": model_name,
+                        "reasoning_effort": reasoning_effort,
+                        "service_tier": service_tier,
+                    },
                 }
             }
         )
@@ -175,6 +183,7 @@ async def probe(model_name, reasoning_effort="medium"):
     return {
         "model": model_name,
         "reasoning_effort": reasoning_effort,
+        "requested_service_tier": service_tier,
         "auth": "chatgpt",
         "device_actions_executed": False,
         "checks": result,
@@ -184,9 +193,14 @@ async def probe(model_name, reasoning_effort="medium"):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live", action="store_true", help="Allow real subscription calls")
-    parser.add_argument("--model", default="gpt-6-astra")
+    parser.add_argument("--model", default="gpt-6.1-sol")
     parser.add_argument("--reasoning-effort", default="medium")
+    parser.add_argument("--service-tier", choices=("fast", "priority"), default="fast")
     args = parser.parse_args()
     if not args.live:
         parser.error("Pass --live to explicitly allow subscription calls")
-    print(json.dumps(asyncio.run(probe(args.model, args.reasoning_effort)), indent=2))
+    print(
+        json.dumps(
+            asyncio.run(probe(args.model, args.reasoning_effort, args.service_tier)), indent=2
+        )
+    )

@@ -6,7 +6,11 @@ from pathlib import Path
 import sys
 
 
-def configure_local_runtime() -> Path:
+def configure_local_runtime(
+    *,
+    profile_name: str = "codex-chatgpt.jsonc",
+    provider_environment: dict[str, str] | None = None,
+) -> Path:
     """Configure this checkout before importing the CLI or SDK."""
     root = Path(__file__).resolve().parents[1]
     state = Path(os.environ.get("ARTEMIS_CODEX_STATE_DIR", root / ".codex-artemis-state")).resolve()
@@ -19,12 +23,14 @@ def configure_local_runtime() -> Path:
     os.environ.update(
         ARTEMIS_APP_DIR=str(state),
         ARTEMIS_TRACES_DIR=str(state / "traces"),
-        ARTEMIS_ARTEMIS_JSONC=str(root / "config/codex-chatgpt.jsonc"),
+        ARTEMIS_ARTEMIS_JSONC=str(root / "config" / profile_name),
         ARTEMIS_STANDALONE="1",
         ARTEMIS_KEEP_DEVICE_AWAKE="false",
         ARTEMIS_HELPER_AUTO_INSTALL="false",
         ARTEMIS_HIERARCHY_BACKEND="helper",
     )
+    if provider_environment:
+        os.environ.update(provider_environment)
     for name in ("NO_PROXY", "no_proxy"):
         os.environ[name] = ",".join(
             filter(None, [os.environ.get(name, ""), "127.0.0.1", "localhost", "::1"])

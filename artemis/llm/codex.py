@@ -145,6 +145,7 @@ class CodexChatModel(BaseChatModel):
     model_name: str
     timeout_seconds: float = Field(default=180, gt=0)
     reasoning_effort: str | None = None
+    service_tier: Literal["fast", "priority"] | None = None
     executable: str = "codex"
     disable_streaming: bool | Literal["tool_calling"] = True
 
@@ -154,7 +155,12 @@ class CodexChatModel(BaseChatModel):
 
     @property
     def _identifying_params(self) -> dict:
-        return {"model_name": self.model_name, "provider": "codex"}
+        return {
+            "model_name": self.model_name,
+            "provider": "codex",
+            "reasoning_effort": self.reasoning_effort,
+            "service_tier": self.service_tier,
+        }
 
     def bind_tools(self, tools, *, tool_choice=None, **kwargs):
         if kwargs:
@@ -309,6 +315,8 @@ class CodexChatModel(BaseChatModel):
                     "model_name": self.model_name,
                     "provider": "codex",
                     "auth": "chatgpt",
+                    "reasoning_effort": self.reasoning_effort,
+                    "requested_service_tier": self.service_tier,
                 },
                 usage_metadata={
                     "input_tokens": input_tokens,
@@ -427,6 +435,8 @@ class CodexChatModel(BaseChatModel):
         config["features.skip_host_skill_discovery"] = True
         if self.reasoning_effort:
             config["model_reasoning_effort"] = self.reasoning_effort
+        if self.service_tier:
+            config["service_tier"] = self.service_tier
         for key, value in config.items():
             args.extend(["-c", f"{key}={json.dumps(value)}"])
         for path in images:

@@ -121,7 +121,7 @@ class LLMConfig(LLMConfigBase):
             if item == "history_analyzer":
                 return self.operator
             elif item in ("validator_pixel_safety_net", "planner_validation"):
-                if self.operator.provider == "codex":
+                if self.operator.provider == "codex" or self.operator.use_responses_api:
                     return self.operator
                 # Both are cheap, high-frequency judges: the pixel safety net
                 # runs before actions, the planner validator after every
@@ -204,7 +204,11 @@ def _expand_default_into_nodes(config_dict: dict) -> dict:
         "planner_validation",
         "output_analyzer",
     ):
-        if default_model_cfg.get("provider") == "codex" or node in nodes_override:
+        if (
+            default_model_cfg.get("provider") == "codex"
+            or default_model_cfg.get("use_responses_api")
+            or node in nodes_override
+        ):
             result[node] = {**default_model_cfg, **nodes_override.get(node, {})}
 
     return result

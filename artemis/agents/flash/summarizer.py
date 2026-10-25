@@ -169,7 +169,9 @@ class VisualStepSummarizer(StepMemoryService):
 
             ctx.llm_config = get_default_llm_config()
         summarizer = getattr(getattr(ctx, "llm_config", None), "summarizer", None)
-        if getattr(summarizer, "provider", None) == "codex":
+        if getattr(summarizer, "provider", None) == "codex" or getattr(
+            summarizer, "use_responses_api", False
+        ):
             self._llm = get_memory_llm(ctx, model_name=model_name)
         else:
             try:

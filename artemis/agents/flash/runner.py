@@ -280,14 +280,18 @@ class FlashRunner:
     def _init_llm(self):
         """Initializes the Universal LLM via the Service Layer."""
         operator = getattr(getattr(self.ctx, "llm_config", None), "operator", None)
-        if getattr(operator, "provider", None) == "codex":
+        if getattr(operator, "provider", None) == "codex" or getattr(
+            operator, "use_responses_api", False
+        ):
             return get_llm(self.ctx, name="operator")
         try:
             return get_llm(self.ctx, name="operator")
         except Exception as e:
             # get_llm may have loaded the context lazily before failing.
             operator = getattr(getattr(self.ctx, "llm_config", None), "operator", None)
-            if getattr(operator, "provider", None) == "codex":
+            if getattr(operator, "provider", None) == "codex" or getattr(
+                operator, "use_responses_api", False
+            ):
                 raise
             logger.warning(f"Failed to get operator LLM from config, using default: {e}")
 

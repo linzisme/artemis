@@ -22,7 +22,7 @@ Anthropic, OpenRouter, and local Ollama/vLLM endpoints.
 from enum import StrEnum
 import hashlib
 import os
-from typing import Any
+from typing import Any, Literal
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import BaseModel, Field
@@ -102,6 +102,10 @@ class ModelEndpoint(BaseModel):
     reasoning_effort: str | None = Field(
         default=None, description="Reasoning effort: 'low', 'medium', 'high'"
     )
+    service_tier: Literal["fast", "priority"] | None = Field(
+        default=None, description="Requested OpenAI or Codex service tier"
+    )
+    use_responses_api: bool = False
     thinking_budget: int | None = Field(default=None, description="Thinking budget token count")
     thinking_level: str | None = Field(
         default=None, description="Thinking level: 'minimal', 'low', 'medium', 'high'"
@@ -129,6 +133,8 @@ class ModelEndpoint(BaseModel):
             self.thinking_level,
             self.include_thoughts,
             self.reasoning_effort,
+            self.service_tier,
+            self.use_responses_api,
             self.enable_grounding,
             self.api_base,
             api_key_digest,
@@ -236,6 +242,7 @@ class ModelFactory:
                 model_name=endpoint.model_name,
                 timeout_seconds=endpoint.timeout_seconds,
                 reasoning_effort=endpoint.reasoning_effort,
+                service_tier=endpoint.service_tier,
             )
 
         if provider == ModelProvider.GOOGLE:
@@ -318,6 +325,20 @@ class ModelFactory:
             }
             if endpoint.reasoning_effort:
                 kwargs["reasoning_effort"] = endpoint.reasoning_effort
+            if endpoint.service_tier:
+                kwargs["service_tier"] = endpoint.service_tier
+            if endpoint.use_responses_api:
+                # Reasoning Responses endpoints do not accept temperature. Keep
+                # messages native so history can reuse the provider's prompt cache.
+                kwargs.pop("temperature", None)
+                kwargs.update(
+                    use_responses_api=True,
+                    streaming=True,
+                    store=False,
+                    use_previous_response_id=False,
+                    include=["reasoning.encrypted_content"],
+                    max_retries=0,
+                )
             return ChatOpenAI(**{k: v for k, v in kwargs.items() if v is not None})
 
         elif provider == ModelProvider.ANTHROPIC:

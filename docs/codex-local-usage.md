@@ -1,5 +1,33 @@
 # Projects 本地订阅版：使用与迁移
 
+## 2026-10-25 当前入口改为 Magpie
+
+用户确认改走 Magpie HTTP、继续使用同一 Sol 模型。8000 和默认启动脚本已切到 `scripts/magpie_local.py`，运行数据仍沿用 `.codex-artemis-state/`。参数、验证、Fast 实际档位未确认及双工具调用限制见 [Magpie 通道试用记录](magpie-sol.md)。以下保留此前直接 Codex CLI 方案的配置和回退记录。
+
+## 2026-10-24 默认启动入口固定到 Sol
+
+用户明确要求不再使用 Gemini，使用 ChatGPT 登录的 `gpt-6.1-sol` / `fast` / `medium`。本次确认原 `Projects/artemis/local/artemis.sh` 仍固定加载 Gemini 配置，已将它改为调用本仓 `scripts/codex_local.py`；因此现有 `start.command` 及通过该脚本执行的启动、重启命令也使用订阅配置。原脚本已备份到本仓 `.local-validation/sol-fast-medium-20261024/artemis.sh.before`，原 API 凭据未改动。需要恢复旧入口时，必须先显式恢复该备份；下面 2026-10-23 的回退命令仅适用于当时的原启动脚本。
+
+8000 已从空闲的原服务切换到本仓服务，当前请求参数仍由 `config/codex-chatgpt.jsonc` 指定。启动方式沿用下节命令，进程在后台运行，未新增开机启动。当前模型调用验证记录位于 `.local-validation/sol-fast-medium-20261024/probe.json`。
+
+## 2026-10-23 订阅服务切换
+
+用户明确要求停止原有测试并将 8000 切换到 ChatGPT 登录方案。当前入口为 `http://127.0.0.1:8000`，源码来自 `Projects/artemis-codex`，配置为 `config/codex-chatgpt.jsonc`：`provider=codex`、`model=gpt-6.1-sol`、`reasoning_effort=medium`、`service_tier=fast`。使用官方 Codex CLI 0.164.0 的现有 ChatGPT 登录，每次推理显式传入上述参数。运行数据隔离在 `.codex-artemis-state/`；原 `Projects/artemis/.env` 和 Sub2API 配置保留，供需要时回退。
+
+启动命令（从 `Projects/artemis-codex` 执行，先确认 8000 空闲）：
+
+```bash
+.venv/bin/python -u -c 'from scripts.codex_local import configure_local_runtime; configure_local_runtime(); from apps.admin_console.server import main; main(["--host", "127.0.0.1", "--port", "8000"])'
+```
+
+此入口使用仓库随附的前端资源，不触发前端依赖安装或构建。服务本次按需启动，未配置开机自启动。需要回退时先停止当前 8000 服务，再从 `Projects/artemis` 执行 `local/artemis.sh restart --host 127.0.0.1 --port 8000 --no-open`。
+
+验证：真实订阅探针 6/6（文本、合成图片、双工具声明、模拟工具回执续接、Checker schema、Explorer 坐标）；没有执行设备动作。相关回归 45 passed，Ruff lint/format 和 diff check 通过。探针结果在 `.local-validation/sol-fast-medium-20261023/probe.json`。首页及两个 JavaScript 资源均 HTTP 200；`/api/status` 显示 `provider=codex`、`id=gpt-6.1-sol`。本次没有完成目标 App 的设备 E2E 验收。
+
+原服务任务已通过停止接口结束。另一个工作树中的 Claude 回归控制器曾重新提交真机任务；暂停该外部控制器被自动审批拒绝，本次未暂停或修改该控制器。因此设备任务可能被其它会话再次提交，不能把一次空闲状态当作调度器已停止。
+
+以下为 2026-10-12 迁移时的历史记录。
+
 ## 本次需求与验收依据
 
 2026-10-12 用户要求迁移到 `Projects/artemis-codex`，保留 `Projects/artemis` 及其未提交修改，保留回退，避免依赖临时任务目录；核实 CLI／SDK／MCP、服务状态，并从新目录运行专用模拟器 Settings→Battery smoke。不得新增常驻服务、开机启动、全局安装、客户端配置或持久授权。本节记录当前请求，不是补造历史 spec/ticket。迁移前基线为 `61ab5921fbd3f0ec5d1b4509fdc89b3274680a01`。

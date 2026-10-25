@@ -256,6 +256,34 @@ def test_codex_factory_needs_no_api_key(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("use_fallback", [False, True])
+async def test_subscription_profile_preserves_fast_medium_through_cli(cli, use_fallback):
+    from types import SimpleNamespace
+
+    from artemis.config.llm import LLMConfig, _expand_default_into_nodes
+    from artemis.services.llm import _resolve_endpoint
+    from third_party.mobile_use.utils.file import load_jsonc
+
+    profile = Path(__file__).resolve().parents[2] / "config" / "codex-chatgpt.jsonc"
+    with profile.open() as stream:
+        config = LLMConfig.model_validate(_expand_default_into_nodes(load_jsonc(stream)))
+    endpoint = _resolve_endpoint(
+        SimpleNamespace(llm_config=config), "planner", use_fallback=use_fallback
+    )
+    assert endpoint.cache_key() != endpoint.model_copy(update={"service_tier": None}).cache_key()
+    model = ModelFactory.create_model(endpoint)
+    configure, receipt = cli
+    model.executable = configure().executable
+    result = await model.ainvoke("hello")
+    args = json.loads(receipt.read_text())["args"]
+    assert args[args.index("--model") + 1] == "gpt-6.1-sol"
+    assert 'model_reasoning_effort="medium"' in args
+    assert 'service_tier="fast"' in args
+    assert 'forced_login_method="chatgpt"' in args
+    assert result.response_metadata["requested_service_tier"] == "fast"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "content",
     [

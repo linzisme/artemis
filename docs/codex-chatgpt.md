@@ -6,7 +6,7 @@
 
 ## 启动
 
-先自行安装官方 Codex CLI 并登录 ChatGPT。本实现按 CLI **0.161.0** 的 flags 验证；旧版本缺少 flags 时会失败，不降级到 API。
+先自行安装官方 Codex CLI 并登录 ChatGPT。本次按 CLI **0.164.0** 验证；旧版本缺少 flags 时会失败，不降级到 API。
 
 ```bash
 codex --version
@@ -24,7 +24,9 @@ PYTHONPATH=. uv run python scripts/probe_codex_subscription.py --live
 # uv run artemis run '你的测试任务' --profile pro --device-serial <测试设备serial>
 ```
 
-示例模型为 `gpt-6-astra`，reasoning effort 为 `medium`，实际可用模型以自己的 Codex CLI 为准。修改配置时同时修改 `default.model`、同 provider fallback、Flash step summarizer 与 memory chunking 模型；推理档位由 `default.reasoning_effort` 指定。探针可用 `--model`、`--reasoning-effort` 覆盖默认值。未登录、额度耗尽、模型不可用、请求超时均报错；不会创建新登录或跨到 API provider。
+当前订阅配置为 `gpt-6.1-sol`、reasoning effort `medium`、service tier `fast`，实际可用模型以自己的 Codex CLI 为准。修改配置时同时修改 `default.model`、同 provider fallback、Flash step summarizer 与 memory chunking 模型；主模型与 fallback 均显式设置 `reasoning_effort` 和 `service_tier`。探针可用 `--model`、`--reasoning-effort`、`--service-tier` 覆盖默认值。未登录、额度耗尽、模型不可用、请求超时均报错；不会创建新登录或跨到 API provider。
+
+适配器使用 `--ignore-user-config`，因此 Fast 必须由 ARTEMIS 配置显式传入 CLI；不能依赖全局 `config.toml`。[官方配置说明](https://learn.chatgpt.com/docs/config-file/config-reference)将 `service_tier="fast"` 映射为请求值 `priority`。响应 metadata 中的 `requested_service_tier` 记录请求档位，不作为服务端实际处理档位或加速倍数的独立证明。
 
 ## 适配边界
 

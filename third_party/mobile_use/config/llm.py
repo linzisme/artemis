@@ -61,6 +61,8 @@ class LLM(BaseModel):
     thinking_budget: int | None = None
     thinking_level: Literal["minimal", "low", "medium", "high"] | None = None
     reasoning_effort: Literal["none", "low", "medium", "high"] | None = None
+    service_tier: Literal["fast", "priority"] | None = None
+    use_responses_api: bool = False
     include_thoughts: bool | None = None
     enable_grounding: bool | None = None
 

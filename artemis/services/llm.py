@@ -935,19 +935,24 @@ def _resolve_endpoint(
         thinking_budget=_get_val(cfg, "thinking_budget", int),
         thinking_level=_get_val(cfg, "thinking_level", str),
         reasoning_effort=_get_val(cfg, "reasoning_effort", str),
+        service_tier=_get_val(cfg, "service_tier", str),
+        use_responses_api=_get_val(cfg, "use_responses_api", bool) or False,
         include_thoughts=_get_val(cfg, "include_thoughts", bool),
         enable_grounding=_get_val(cfg, "enable_grounding", bool) or False,
     )
 
 
 def get_memory_llm(ctx=None, model_name: str | None = None, *, use_fallback=False):
-    """Use subscription memory for Codex; preserve the legacy Google API path."""
+    """Honor Codex/Responses routing; preserve other legacy memory defaults."""
     ctx = ctx if ctx is not None else SimpleNamespace(llm_config=get_default_llm_config())
     config = getattr(ctx, "llm_config", None)
     if config is None:
         config = get_default_llm_config()
         ctx.llm_config = config
-    if getattr(getattr(config, "summarizer", None), "provider", None) != "codex":
+    summarizer = getattr(config, "summarizer", None)
+    if getattr(summarizer, "provider", None) != "codex" and not getattr(
+        summarizer, "use_responses_api", False
+    ):
         return get_google_llm(model_name=model_name or "gemini-3.8-flash", temperature=0.0)
     endpoint = _resolve_endpoint(ctx, "summarizer", use_fallback=use_fallback)
     updates = {"temperature": 0.0}

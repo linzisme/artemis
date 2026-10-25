@@ -1,0 +1,36 @@
+{
+  // Fast is requested as priority. Verify the served tier in gateway responses.
+  "default": {
+    "provider": "openai",
+    "model": "codex/gpt-6.1-sol",
+    "use_responses_api": true,
+    "reasoning_effort": "medium",
+    "service_tier": "priority",
+    "timeout": 180,
+    "fallback": {
+      "provider": "openai",
+      "model": "codex/gpt-6.1-sol",
+      "use_responses_api": true,
+      "reasoning_effort": "medium",
+      "service_tier": "priority"
+    }
+  },
+  "nodes": {},
+  "agent": {
+    "flash": {
+      "max_turns": 12,
+      "explorer_mode": "pro",
+      "step_summarizer": { "enabled": true, "model": "codex/gpt-6.1-sol" }
+    },
+    "pro": {
+      "explorer": { "mode": "pro" },
+      "video_analyzer": { "enabled": false }
+    },
+    "memory": { "chunking": { "model": "codex/gpt-6.1-sol" } },
+    "video_analyzer": { "enabled": false, "enable_ledger": false },
+    "explorer": { "default_version": "pro", "caching": false },
+    "denylisted_tools": {
+      "explorer": ["ask_perception_tool", "detect_objects", "get_ocr_list", "ask_image_processor"]
+    }
+  }
+}
