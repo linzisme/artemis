@@ -15,7 +15,7 @@
 """ChatGPT subscription adapter using the official Codex CLI, never auth files.
 
 Calls carry their full history. ARTEMIS executes all declared tools; Codex emits
-validated JSON envelopes. A model's empty execution directory stays stable while
+validated JSON envelopes. A session's empty execution directory stays stable while
 per-call schemas, images and results are ephemeral, including concurrent calls.
 """
 
@@ -25,6 +25,8 @@ import asyncio
 import base64
 import binascii
 import copy
+from contextlib import contextmanager
+from contextvars import ContextVar
 import io
 import json
 import os
@@ -136,6 +138,40 @@ def _object_schema(properties: dict) -> dict:
     }
 
 
+class _CodexExecutionContext:
+    """Allocate an empty directory only when this session actually uses Codex."""
+
+    def __init__(self):
+        self._directory: tempfile.TemporaryDirectory | None = None
+
+    @property
+    def directory(self) -> Path:
+        if self._directory is None:
+            self._directory = tempfile.TemporaryDirectory(prefix="artemis-codex-context-")
+        return Path(self._directory.name)
+
+    def close(self) -> None:
+        if self._directory is not None:
+            self._directory.cleanup()
+
+
+_CODEX_EXECUTION_CONTEXT: ContextVar[_CodexExecutionContext | None] = ContextVar(
+    "codex_execution_context", default=None
+)
+
+
+@contextmanager
+def codex_session_context():
+    """Scope CLI identity to a task run, including inherited background tasks."""
+    context = _CodexExecutionContext()
+    token = _CODEX_EXECUTION_CONTEXT.set(context)
+    try:
+        yield
+    finally:
+        _CODEX_EXECUTION_CONTEXT.reset(token)
+        context.close()
+
+
 class CodexChatModel(BaseChatModel):
     """Non-streaming CLI model with asynchronous cancellation and tool validation.
 
@@ -149,8 +185,8 @@ class CodexChatModel(BaseChatModel):
     service_tier: Literal["fast", "priority"] | None = None
     executable: str = "codex"
     disable_streaming: bool | Literal["tool_calling"] = True
-    # TemporaryDirectory finalizes on model disposal or process exit. Never store
-    # conversation artifacts here: factory reuse can span ARTEMIS sessions.
+    # Standalone adapter calls have no ARTEMIS session; retain their model-local
+    # context. Session invocations always use the task-owned context instead.
     _execution_directory: tempfile.TemporaryDirectory = PrivateAttr(
         default_factory=lambda: tempfile.TemporaryDirectory(prefix="artemis-codex-context-")
     )
@@ -280,7 +316,12 @@ class CodexChatModel(BaseChatModel):
                     ensure_ascii=False,
                 )
             )
-            execution_root = Path(self._execution_directory.name)
+            session_context = _CODEX_EXECUTION_CONTEXT.get()
+            execution_root = (
+                session_context.directory
+                if session_context is not None
+                else Path(self._execution_directory.name)
+            )
             args = self._command(execution_root, schema_path, result_path, images)
             events = await self._execute(args, prompt, execution_root)
             try:

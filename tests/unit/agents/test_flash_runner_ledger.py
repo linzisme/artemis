@@ -42,7 +42,6 @@ from artemis.agents.operator.prompts import (
 )
 from artemis.agents.validator.tool_declarations import ToolExecutionResult
 from artemis.context import ArtemisContext
-from artemis.config.llm import LLMConfig, _expand_default_into_nodes
 from artemis.graph.state import State
 from artemis.memory.transcript import (
     EPHEMERAL_BLOCKS_KEY,
@@ -57,10 +56,13 @@ FAILED_RESULT_RE = re.compile(
 )
 
 
+pytestmark = pytest.mark.usefixtures("google_test_runtime")
+
+
 @pytest.fixture
-def mock_context():
+def mock_context(google_test_runtime):
     ctx = Mock(spec=ArtemisContext)
-    ctx.llm_config = LLMConfig.model_validate(_expand_default_into_nodes({}))
+    ctx.llm_config = google_test_runtime
     ctx.device = Mock()
     ctx.device.device_width = 1080
     ctx.device.device_height = 2400

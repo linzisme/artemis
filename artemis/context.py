@@ -31,6 +31,7 @@ except ImportError:
 
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from artemis.utils.video import detect_video_tools_enabled
+from artemis.llm.codex import codex_session_context
 
 
 from artemis.config import ExplorerConfig, LLMConfig, OutputterConfig
@@ -195,10 +196,22 @@ class ArtemisContext(DeviceClientAccessors, BaseModel):
     operator's transcript prompt path (``agent.memory.transcript.enabled``).
     Lives beside ``step_memory``; the State never carries message payloads."""
 
+    _codex_session: Any = PrivateAttr(default=None)
+
     async def __aenter__(self) -> ArtemisContext:
+        self._codex_session = codex_session_context()
+        self._codex_session.__enter__()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
+        try:
+            await self._close(exc_type, exc_val, exc_tb)
+        finally:
+            if self._codex_session is not None:
+                self._codex_session.__exit__(exc_type, exc_val, exc_tb)
+                self._codex_session = None
+
+    async def _close(self, exc_type, exc_val, exc_tb):
         # Close the in-process action session before draining background tasks so its
         # owner task exits cleanly rather than being cancelled below.
         if self.action_session is not None:

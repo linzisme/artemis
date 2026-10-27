@@ -30,8 +30,9 @@ async def test_codex_cache_probe_requires_valid_usage_independently_of_answer(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("sequential_failure", [False, True])
 async def test_codex_probe_keeps_sequential_checks_when_parallel_is_unsupported(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, sequential_failure
 ):
     import json
     import os
@@ -81,6 +82,8 @@ async def test_codex_probe_keeps_sequential_checks_when_parallel_is_unsupported(
             },
         ),
     ]
+    if sequential_failure:
+        responses[7] = text("No tool call")
     queue = tmp_path / "responses.json"
     queue.write_text(json.dumps(responses))
     executable = tmp_path / "codex"
@@ -102,7 +105,22 @@ print(json.dumps({{"type": "turn.completed", "usage": {{"input_tokens": 23, "out
     monkeypatch.delenv("ARTEMIS_FAKE_LLM", raising=False)
     monkeypatch.setattr(settings, "TRACES_PATH", tmp_path)
     monkeypatch.setattr(settings, "DATA_ENGINE_DB_PATH", tmp_path / "probe.db")
-    result = await probe("synthetic-model")
+    output = tmp_path / "probe.json"
+    if sequential_failure:
+        with pytest.raises(AssertionError):
+            await probe("synthetic-model", output=output)
+        result = json.loads(output.read_text())
+        assert result["checks"]["text"]["passed"]
+        assert result["checks"]["tool_calls"]["status"] == "unsupported"
+        assert result["checks"]["sequential_first_tool"]["passed"]
+        assert result["checks"]["sequential_second_tool"]["status"] == "failed"
+        for name in ("tool_result_continuation", "checker_schema", "explorer_universal_loop"):
+            assert result["checks"][name]["status"] == "unexecuted"
+        assert not result["required_checks_passed"]
+        assert not result["all_checks_passed"]
+        return
+    result = await probe("synthetic-model", output=output)
+    assert json.loads(output.read_text()) == result
     assert result["checks"]["tool_calls"]["status"] == "unsupported"
     assert result["checks"]["sequential_first_tool"]["passed"]
     assert result["checks"]["sequential_second_tool"]["passed"]
@@ -111,3 +129,74 @@ print(json.dumps({{"type": "turn.completed", "usage": {{"input_tokens": 23, "out
     assert result["required_checks_passed"]
     assert not result["all_checks_passed"]
     assert json.loads(queue.read_text()) == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["process", "timeout", "cancel"])
+async def test_codex_probe_persists_failure_during_cache_measurement(
+    cli, monkeypatch, tmp_path, failure
+):
+    import asyncio
+    import json
+    import os
+    from pathlib import Path
+
+    from artemis.llm.codex import CodexError
+    from scripts.probe_codex_subscription import probe
+
+    configure, receipt = cli
+    model = configure(**({"error": "unsupported model"} if failure == "process" else {"sleep": 30}))
+    Path(model.executable).with_name("codex").symlink_to(model.executable)
+    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
+    output = tmp_path / "failed-probe.json"
+    task = asyncio.create_task(probe("synthetic-model", output=output))
+    if failure != "process":
+        for _ in range(200):
+            if receipt.exists():
+                break
+            await asyncio.sleep(0.01)
+        assert receipt.exists()
+        if failure == "cancel":
+            task.cancel()
+        with pytest.raises(asyncio.CancelledError if failure == "cancel" else TimeoutError):
+            await asyncio.wait_for(task, timeout=0.1)
+    else:
+        with pytest.raises(CodexError):
+            await task
+    result = json.loads(output.read_text())
+    assert result["checks"]["related_call_cache"]["status"] == "failed"
+    assert result["checks"]["text"]["status"] == "unexecuted"
+    assert not result["required_checks_passed"]
+    assert not result["all_checks_passed"]
+
+
+def test_codex_probe_cli_prints_failure_report_and_exits_nonzero(cli, monkeypatch, tmp_path):
+    import json
+    import os
+    from pathlib import Path
+    import subprocess
+    import sys
+
+    configure, _ = cli
+    model = configure(error="unsupported model")
+    Path(model.executable).with_name("codex").symlink_to(model.executable)
+    monkeypatch.setenv("PATH", str(tmp_path) + os.pathsep + os.environ["PATH"])
+    output = tmp_path / "cli-report.json"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/probe_codex_subscription.py",
+            "--live",
+            "--cache-only",
+            "--output",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert completed.returncode == 1
+    report = json.loads(output.read_text())
+    assert json.loads(completed.stdout) == report
+    assert report["checks"]["related_call_cache"]["status"] == "failed"
+    assert not report["required_checks_passed"]

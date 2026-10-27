@@ -82,14 +82,13 @@ class _FakeSession:
         )
 
 
+pytestmark = pytest.mark.usefixtures("google_test_runtime")
+
+
 @pytest.fixture
-def mock_context():
+def mock_context(google_test_runtime):
     ctx = Mock(spec=ArtemisContext)
-    ctx.llm_config = Mock()
-    llm_cfg = Mock()
-    llm_cfg.model = "gemini-2.5-flash"
-    llm_cfg.temperature = 0.1
-    ctx.llm_config.get_agent.return_value = llm_cfg
+    ctx.llm_config = google_test_runtime
     ctx.device = Mock()
     ctx.device.device_width = 1080
     ctx.device.device_height = 2400
