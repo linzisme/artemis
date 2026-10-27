@@ -1,0 +1,306 @@
+{
+  "profile": "magpie-terra.jsonc",
+  "model": "codex/gpt-6.1-terra",
+  "provider": "openai",
+  "protocol": "responses",
+  "base_url": "http://127.0.0.1:3425/v1",
+  "reasoning_effort": "medium",
+  "requested_service_tier": null,
+  "device_actions_executed": false,
+  "completed": true,
+  "all_checks_passed": false,
+  "checks": {
+    "text": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 2.94,
+      "usage": {
+        "input_tokens": 4103,
+        "output_tokens": 8,
+        "total_tokens": 4111,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 3968
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      },
+      "served_tier": "default",
+      "served_model": "gpt-6.1-terra"
+    },
+    "vision": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 3.66,
+      "usage": {
+        "input_tokens": 4308,
+        "output_tokens": 5,
+        "total_tokens": 4313,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 3968
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      },
+      "served_tier": "default",
+      "served_model": "gpt-6.1-terra"
+    },
+    "tool_calls": {
+      "passed": false,
+      "status": "unsupported",
+      "error_type": "AssertionError",
+      "usage": {
+        "input_tokens": 4422,
+        "output_tokens": 31,
+        "total_tokens": 4453,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 0
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      },
+      "observed_tool_calls": [
+        {
+          "name": "click",
+          "args": {
+            "delay_ms": 100,
+            "target": 2,
+            "target_description": null,
+            "times": 1
+          },
+          "id": "call_350f0b62ae0549f0ba78e88016695cab",
+          "type": "tool_call"
+        }
+      ],
+      "observed_text": ""
+    },
+    "sequential_first_tool": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 3.19,
+      "usage": {
+        "input_tokens": 4390,
+        "output_tokens": 31,
+        "total_tokens": 4421,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 0
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      },
+      "served_tier": "default",
+      "served_model": "gpt-6.1-terra"
+    },
+    "sequential_second_tool": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 2.8,
+      "usage": {
+        "input_tokens": 4459,
+        "output_tokens": 18,
+        "total_tokens": 4477,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 4224
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      },
+      "served_tier": "default",
+      "served_model": "gpt-6.1-terra"
+    },
+    "tool_continuation": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 4.6,
+      "usage": {
+        "input_tokens": 4520,
+        "output_tokens": 9,
+        "total_tokens": 4529,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 4352
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      },
+      "served_tier": "default",
+      "served_model": "gpt-6.1-terra"
+    },
+    "checker": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 2.89
+    },
+    "hopper": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 3.13
+    },
+    "explorer": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 6.87
+    },
+    "cache_first": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 2.86,
+      "usage": {
+        "input_tokens": 7353,
+        "output_tokens": 6,
+        "total_tokens": 7359,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 3968
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      },
+      "served_tier": "default",
+      "served_model": "gpt-6.1-terra"
+    },
+    "cache_followup": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 4.3,
+      "usage": {
+        "input_tokens": 7374,
+        "output_tokens": 6,
+        "total_tokens": 7380,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 7168
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      },
+      "served_tier": "default",
+      "served_model": "gpt-6.1-terra"
+    }
+  },
+  "requests": [
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-terra",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": null,
+      "stream": true,
+      "input_items": 1
+    },
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-terra",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": null,
+      "stream": true,
+      "input_items": 1
+    },
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-terra",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": null,
+      "stream": true,
+      "input_items": 2
+    },
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-terra",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": null,
+      "stream": true,
+      "input_items": 2
+    },
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-terra",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": null,
+      "stream": true,
+      "input_items": 5
+    },
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-terra",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": null,
+      "stream": true,
+      "input_items": 8
+    },
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-terra",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": null,
+      "stream": true,
+      "input_items": 1
+    },
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-terra",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": null,
+      "stream": true,
+      "input_items": 1
+    },
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-terra",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": null,
+      "stream": true,
+      "input_items": 2
+    },
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-terra",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": null,
+      "stream": true,
+      "input_items": 2
+    },
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-terra",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": null,
+      "stream": true,
+      "input_items": 4
+    }
+  ],
+  "required_checks_passed": true
+}

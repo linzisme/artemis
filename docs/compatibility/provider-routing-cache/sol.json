@@ -1,0 +1,198 @@
+{
+  "profile": "magpie-sol.jsonc",
+  "model": "codex/gpt-6.1-sol",
+  "provider": "openai",
+  "protocol": "responses",
+  "base_url": "http://127.0.0.1:3425/v1",
+  "reasoning_effort": "medium",
+  "requested_service_tier": "priority",
+  "device_actions_executed": false,
+  "completed": false,
+  "all_checks_passed": false,
+  "checks": {
+    "text": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 3.05,
+      "usage": {
+        "input_tokens": 4167,
+        "output_tokens": 8,
+        "total_tokens": 4175,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 3968
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      },
+      "served_tier": "default",
+      "served_model": "gpt-6.1-sol"
+    },
+    "vision": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 2.92,
+      "usage": {
+        "input_tokens": 4372,
+        "output_tokens": 5,
+        "total_tokens": 4377,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 3968
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      },
+      "served_tier": "default",
+      "served_model": "gpt-6.1-sol"
+    },
+    "tool_calls": {
+      "passed": false,
+      "status": "unsupported",
+      "error_type": "AssertionError",
+      "usage": {
+        "input_tokens": 4486,
+        "output_tokens": 31,
+        "total_tokens": 4517,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 0
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      },
+      "observed_tool_calls": [
+        {
+          "name": "click",
+          "args": {
+            "delay_ms": 100,
+            "target": 2,
+            "target_description": null,
+            "times": 1
+          },
+          "id": "call_f2d888f860034d6eb587932da8e4adea",
+          "type": "tool_call"
+        }
+      ],
+      "observed_text": ""
+    },
+    "sequential_first_tool": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 3.33,
+      "usage": {
+        "input_tokens": 4454,
+        "output_tokens": 31,
+        "total_tokens": 4485,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 0
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      },
+      "served_tier": "default",
+      "served_model": "gpt-6.1-sol"
+    },
+    "sequential_second_tool": {
+      "passed": false,
+      "status": "failed",
+      "error_type": "AssertionError",
+      "usage": {
+        "input_tokens": 4523,
+        "output_tokens": 59,
+        "total_tokens": 4582,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 4352
+        },
+        "output_token_details": {
+          "reasoning": 41
+        }
+      },
+      "observed_tool_calls": [],
+      "observed_text": "{\"name\":\"press_key\",\"arguments\":{\"key\":\"BACK\"}}"
+    },
+    "tool_continuation": {
+      "passed": false,
+      "status": "unexecuted"
+    },
+    "explorer": {
+      "passed": false,
+      "status": "unexecuted"
+    },
+    "hopper": {
+      "passed": false,
+      "status": "unexecuted"
+    },
+    "cache_first": {
+      "passed": false,
+      "status": "unexecuted"
+    },
+    "checker": {
+      "passed": false,
+      "status": "unexecuted"
+    },
+    "cache_followup": {
+      "passed": false,
+      "status": "unexecuted"
+    }
+  },
+  "requests": [
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-sol",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": "priority",
+      "stream": true,
+      "input_items": 1
+    },
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-sol",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": "priority",
+      "stream": true,
+      "input_items": 1
+    },
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-sol",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": "priority",
+      "stream": true,
+      "input_items": 2
+    },
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-sol",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": "priority",
+      "stream": true,
+      "input_items": 2
+    },
+    {
+      "path": "/v1/responses",
+      "model": "codex/gpt-6.1-sol",
+      "reasoning": {
+        "effort": "medium"
+      },
+      "service_tier": "priority",
+      "stream": true,
+      "input_items": 5
+    }
+  ],
+  "required_checks_passed": false
+}

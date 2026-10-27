@@ -1,0 +1,172 @@
+{
+  "provider": "codex",
+  "protocol": "codex exec JSON envelope",
+  "endpoint": "CLI-managed ChatGPT subscription",
+  "model": "gpt-6.1-sol",
+  "reasoning_effort": "medium",
+  "requested_service_tier": "fast",
+  "auth": "chatgpt",
+  "device_actions_executed": false,
+  "checks": {
+    "related_call_cache": {
+      "status": "unsupported",
+      "passed": false,
+      "reason": "Cache reuse was not observed on later calls; caching is unsupported for this probe run. This does not establish that the provider never caches.",
+      "later_cached_input_tokens": [
+        0,
+        0
+      ],
+      "calls": [
+        {
+          "seconds": 12.48,
+          "usage": {
+            "input_tokens": 17959,
+            "output_tokens": 22,
+            "total_tokens": 17981,
+            "input_token_details": {
+              "cache_read": 8320
+            }
+          },
+          "valid": true
+        },
+        {
+          "seconds": 10.85,
+          "usage": {
+            "input_tokens": 17997,
+            "output_tokens": 22,
+            "total_tokens": 18019,
+            "input_token_details": {
+              "cache_read": 0
+            }
+          },
+          "valid": true
+        },
+        {
+          "seconds": 11.49,
+          "usage": {
+            "input_tokens": 18035,
+            "output_tokens": 22,
+            "total_tokens": 18057,
+            "input_token_details": {
+              "cache_read": 0
+            }
+          },
+          "valid": true
+        }
+      ]
+    },
+    "text": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 10.15,
+      "usage": {
+        "input_tokens": 11267,
+        "output_tokens": 24,
+        "total_tokens": 11291,
+        "input_token_details": {
+          "cache_read": 10880
+        }
+      },
+      "served_tier": null,
+      "served_model": "gpt-6.1-sol",
+      "requested_parameters": {
+        "model_name": "gpt-6.1-sol",
+        "provider": "codex",
+        "auth": "chatgpt",
+        "reasoning_effort": "medium",
+        "requested_service_tier": "fast"
+      }
+    },
+    "vision": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 10.42,
+      "usage": {
+        "input_tokens": 11558,
+        "output_tokens": 19,
+        "total_tokens": 11577,
+        "input_token_details": {
+          "cache_read": 10880
+        }
+      },
+      "served_tier": null,
+      "served_model": "gpt-6.1-sol"
+    },
+    "tool_calls": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 9.93,
+      "usage": {
+        "input_tokens": 11696,
+        "output_tokens": 46,
+        "total_tokens": 11742,
+        "input_token_details": {
+          "cache_read": 0
+        }
+      },
+      "served_tier": null,
+      "served_model": "gpt-6.1-sol"
+    },
+    "sequential_first_tool": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 10.07,
+      "usage": {
+        "input_tokens": 11683,
+        "output_tokens": 31,
+        "total_tokens": 11714,
+        "input_token_details": {
+          "cache_read": 0
+        }
+      },
+      "served_tier": null,
+      "served_model": "gpt-6.1-sol"
+    },
+    "sequential_second_tool": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 9.8,
+      "usage": {
+        "input_tokens": 11831,
+        "output_tokens": 33,
+        "total_tokens": 11864,
+        "input_token_details": {
+          "cache_read": 0
+        }
+      },
+      "served_tier": null,
+      "served_model": "gpt-6.1-sol"
+    },
+    "tool_result_continuation": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 10.91,
+      "usage": {
+        "input_tokens": 11982,
+        "output_tokens": 23,
+        "total_tokens": 12005,
+        "input_token_details": {
+          "cache_read": 0
+        }
+      },
+      "served_tier": null,
+      "served_model": "gpt-6.1-sol"
+    },
+    "checker_schema": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 10.56
+    },
+    "explorer_universal_loop": {
+      "passed": true,
+      "status": "passed",
+      "seconds": 10.86,
+      "coords": [
+        500,
+        500
+      ]
+    }
+  },
+  "required_checks_passed": true,
+  "all_checks_passed": false
+}

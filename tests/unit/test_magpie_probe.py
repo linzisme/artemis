@@ -10,6 +10,7 @@ from scripts.probe_magpie_responses import (
     all_checks_passed,
     cache_reused,
     check_result,
+    required_checks_passed,
 )
 
 
@@ -17,6 +18,9 @@ def test_only_a_complete_probe_can_report_all_passed():
     report = {"checks": {name: {"passed": True} for name in REQUIRED_CHECKS}}
     assert not all_checks_passed(report)
     report["completed"] = True
+    assert required_checks_passed(report)
+    assert not all_checks_passed(report)
+    report["checks"]["tool_calls"] = {"passed": True}
     assert all_checks_passed(report)
     report["checks"].pop("cache_followup")
     assert not all_checks_passed(report)
@@ -36,7 +40,11 @@ async def test_cancellation_records_the_incomplete_check():
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    assert report["checks"]["vision"] == {"passed": False, "error_type": "CancelledError"}
+    assert report["checks"]["vision"] == {
+        "passed": False,
+        "status": "failed",
+        "error_type": "CancelledError",
+    }
     assert not all_checks_passed(report)
 
 
@@ -67,5 +75,28 @@ async def test_nonfatal_capability_failure_remains_in_final_result():
     }
     observed = await check_result(report, "tool_calls", call(), lambda _: False, fatal=False)
     assert observed is response
-    assert not report["checks"]["tool_calls"]["passed"]
     assert not all_checks_passed(report)
+    assert report["checks"]["tool_calls"]["status"] == "unsupported"
+    assert required_checks_passed(report)
+
+
+@pytest.mark.asyncio
+async def test_failed_cache_check_retains_actual_usage_and_fails_required_checks():
+    response = AIMessage(
+        content="CACHE_OK",
+        usage_metadata={
+            "input_tokens": 5000,
+            "output_tokens": 3,
+            "total_tokens": 5003,
+            "input_token_details": {"cache_read": 0},
+        },
+    )
+
+    async def call():
+        return response
+
+    report = {"completed": True, "checks": {name: {"passed": True} for name in REQUIRED_CHECKS}}
+    await check_result(report, "cache_followup", call(), cache_reused, fatal=False)
+    assert report["checks"]["cache_followup"]["usage"]["input_token_details"]["cache_read"] == 0
+    assert report["checks"]["cache_followup"]["status"] == "failed"
+    assert not required_checks_passed(report)
