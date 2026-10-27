@@ -42,6 +42,7 @@ def _context(model: str = "gemini-3.8-flash", denylist: list[str] | None = None)
     ctx.data_engine.base_dir = None
     ctx.llm_config = MagicMock()
     ctx.llm_config.explorer = MagicMock()
+    ctx.llm_config.explorer.provider = "google"
     ctx.llm_config.explorer.model = model
     ctx.llm_config.explorer.temperature = 0.1
     ctx.llm_config.explorer.thinking_level = None
