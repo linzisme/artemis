@@ -14,8 +14,9 @@
 
 """ChatGPT subscription adapter using the official Codex CLI, never auth files.
 
-Each call is stateless. ARTEMIS owns history and executes all declared tools;
-Codex emits a JSON envelope which is validated before entering that tool loop.
+Calls carry their full history. ARTEMIS executes all declared tools; Codex emits
+validated JSON envelopes. A model's empty execution directory stays stable while
+per-call schemas, images and results are ephemeral, including concurrent calls.
 """
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import RunnableLambda
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from PIL import Image
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, PrivateAttr, ValidationError
 
 from artemis.llm.reliability import Failure, FailureCategory, LLMPermanentError
 
@@ -148,6 +149,11 @@ class CodexChatModel(BaseChatModel):
     service_tier: Literal["fast", "priority"] | None = None
     executable: str = "codex"
     disable_streaming: bool | Literal["tool_calling"] = True
+    # TemporaryDirectory finalizes on model disposal or process exit. Never store
+    # conversation artifacts here: factory reuse can span ARTEMIS sessions.
+    _execution_directory: tempfile.TemporaryDirectory = PrivateAttr(
+        default_factory=lambda: tempfile.TemporaryDirectory(prefix="artemis-codex-context-")
+    )
 
     @property
     def _llm_type(self) -> str:
@@ -274,8 +280,9 @@ class CodexChatModel(BaseChatModel):
                     ensure_ascii=False,
                 )
             )
-            args = self._command(root, schema_path, result_path, images)
-            events = await self._execute(args, prompt, root)
+            execution_root = Path(self._execution_directory.name)
+            args = self._command(execution_root, schema_path, result_path, images)
+            events = await self._execute(args, prompt, execution_root)
             try:
                 value = json.loads(result_path.read_text(encoding="utf-8"))
                 _validator(envelope).validate(value)
