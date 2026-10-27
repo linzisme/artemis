@@ -30,9 +30,13 @@ from artemis.agents.flash.summarizer import VisualStepSummarizer
 from artemis.context import ArtemisContext
 
 
+pytestmark = pytest.mark.usefixtures("google_test_runtime")
+
+
 @pytest.fixture
-def mock_context():
+def mock_context(google_test_runtime):
     ctx = Mock(spec=ArtemisContext)
+    ctx.llm_config = google_test_runtime
     ctx.data_engine = None
     return ctx
 

@@ -544,3 +544,35 @@ def test_model_context_is_removed_at_process_exit(cli):
     subprocess.run([sys.executable, "-c", script], check=True, timeout=30)
     recorded = json.loads(receipt.read_text())
     assert not Path(recorded["cwd"]).exists()
+
+
+@pytest.mark.asyncio
+async def test_artemis_session_owns_codex_context_across_cached_model_configurations(
+    cli, monkeypatch
+):
+    from artemis.context import ArtemisContext, DeviceContext
+
+    configure, receipt = cli
+    executable = configure().executable
+    monkeypatch.setenv("PATH", str(Path(executable).parent) + os.pathsep + os.environ["PATH"])
+    Path(executable).with_name("codex").symlink_to(executable)
+    endpoint = ModelEndpoint(provider=ModelProvider.CODEX, model_name="session-test")
+    first = ModelFactory.get_model(endpoint)
+    changed = ModelFactory.get_model(
+        endpoint.model_copy(update={"reasoning_effort": "high", "timeout_seconds": 90})
+    )
+
+    async with ArtemisContext(device=DeviceContext()):
+        await first.ainvoke("first turn")
+        first_directory = Path(json.loads(receipt.read_text())["cwd"])
+        await changed.ainvoke("next turn with changed configuration")
+        assert Path(json.loads(receipt.read_text())["cwd"]) == first_directory
+        async with ArtemisContext(device=DeviceContext()):
+            await first.ainvoke("a different session using the same cached client")
+            second_directory = Path(json.loads(receipt.read_text())["cwd"])
+            assert second_directory != first_directory
+        assert not second_directory.exists()
+        await first.ainvoke("resume outer session")
+        assert Path(json.loads(receipt.read_text())["cwd"]) == first_directory
+        assert list(first_directory.iterdir()) == []
+    assert not first_directory.exists()

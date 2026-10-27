@@ -31,9 +31,13 @@ from artemis.context import ArtemisContext
 from artemis.sdk.builders import Builders
 
 
+pytestmark = pytest.mark.usefixtures("google_test_runtime")
+
+
 @pytest.fixture
-def mock_context():
+def mock_context(google_test_runtime):
     ctx = Mock(spec=ArtemisContext)
+    ctx.llm_config = google_test_runtime
     ctx.data_engine = None
     return ctx
 

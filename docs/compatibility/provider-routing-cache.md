@@ -1,6 +1,6 @@
 # Provider routing, tool-loop, and cache compatibility
 
-Ticket #6, parent specification #1. Integration baseline: `6344605` (tickets #2–#5 merged). This report records deterministic checks and bounded, opt-in synthetic live probes. **Compatibility is partial:** Terra and Codex passed their required live tool behavior; Sol failed required sequential continuation. Codex cache reuse was not observed. The required full test target still has 68 baseline failures.
+Ticket #6, parent specification #1. Integration baseline: `6344605` (tickets #2–#5 merged). This report records deterministic checks and bounded, opt-in synthetic live probes. **Compatibility is partial:** Terra and Codex passed their required live tool behavior; Sol failed required sequential continuation. Codex appended-history cache reuse was not observed. The final review repair results and disposition are recorded below; the original ticket #6 validation is retained as historical evidence.
 
 ## Status definitions
 
@@ -17,12 +17,12 @@ The probes preserve `all_checks_passed` as a strict aggregate and report `requir
 | --- | --- | --- | --- | --- |
 | Magpie Terra, `codex/gpt-6.1-terra`, Responses, medium | Passed text, vision, two sequential declared calls, final answer without calls, Checker/Hopper structured output, public Explorer loop | Unsupported: only `click` returned | **Passed: 7,168 cached / 7,374 input tokens** on the follow-up | None in this probe |
 | Magpie Sol, `codex/gpt-6.1-sol`, Responses, medium, requested priority | **Failed required:** second sequential call returned JSON-shaped text and no tool call | Unsupported: only `click` returned | Unexecuted | Final tool continuation, Checker, Hopper, Explorer, cache first/follow-up |
-| Codex subscription, `gpt-6.1-sol`, medium, requested fast | Passed text, vision, two sequential declared calls, final answer without calls, Checker structured output, public Explorer loop | Passed `click` and `press_key` together | **Unsupported this run: 0 / 0 / 0 cached tokens**, including both later turns | Live schema-rejection injection and live multimodal tool receipts; these are deterministic checks below |
+| Codex subscription, `gpt-6.1-sol`, medium, requested fast | Passed text, vision, two sequential declared calls, final answer without calls, Checker structured output, public Explorer loop | Passed `click` and `press_key` together | **Unsupported this run: 8,320 / 0 / 0 cached tokens**; neither later turn hit cache | Live schema-rejection injection and live multimodal tool receipts; these are deterministic checks below |
 | CA, WorkBuddy, generic OpenAI, Anthropic, OpenRouter, direct Google | Unexecuted live; deterministic routing coverage below | Unexecuted | Unexecuted | All live protocol checks |
 
 Committed synthetic observation snapshots: [Terra](provider-routing-cache/terra.json), [Sol](provider-routing-cache/sol.json), [Codex](provider-routing-cache/codex.json). These contain usage, observed tool calls, and safe request metadata, never authorization headers or credential values. The Sol second-turn response was text `{"name":"press_key","arguments":{"key":"BACK"}}`, with an empty `tool_calls` list. It was not converted into a tool call or credited as successful execution. The run stopped and recorded subsequent checks as unexecuted.
 
-Codex full-run input token counts were **17,959 / 17,997 / 18,035**, with **0 / 0 / 0** cached input. A separate initial cache-only run also reported zero cached input, with input counts **17,961 / 17,999 / 18,037**. Neither run demonstrates real cache reuse. Terra's first cache call reported 3,968 cached / 7,353 input tokens; the acceptance evidence is the later appended-history count, not that initial hit.
+Codex full-run input token counts were **17,959 / 17,997 / 18,035**, with **8,320 / 0 / 0** cached input. A separate initial cache-only run also reported zero cached input, with input counts **17,961 / 17,999 / 18,037**. The full run's initial call did hit cache, but neither run demonstrates appended-history cache reuse. Terra's first cache call reported 3,968 cached / 7,353 input tokens; the acceptance evidence is the later appended-history count, not that initial hit.
 
 Service tiers are requested settings. No conclusion is drawn that the provider applied them; reported served metadata remains in the snapshots. Codex does not report a served tier or an upstream HTTP endpoint through this adapter.
 
@@ -51,7 +51,7 @@ The combined focused suite passed **804 tests**. It covers provider profiles, fa
 
 TDD evidence in `/tmp/artemis-spec-1/ticket-6-evidence`: `red-reporting.log` (missing required-check summary API), `red-codex-parallel.log` (optional single call aborted the full probe), `red-codex-cache.log` (impossible cached-input count incorrectly passed), and `red-unexecuted.log` (missing optional observation incorrectly counted as all passed). Each retained behavior now passes. Cache measurement remains independent of response wording, preserving ticket #5's public related-call contract. New Explorer coverage exercises existing behavior; no production agent or provider code changed in this ticket.
 
-## Required repository checks
+## Ticket #6 repository checks (before final review repair)
 
 The existing shared venv was reused without modification. Imports were checked to resolve this worktree (`/private/tmp/artemis-spec-1/ticket-6/artemis/__init__.py`). Commands ran from the ticket worktree with:
 
@@ -84,7 +84,7 @@ The unchanged full-suite failures are baseline fixture/configuration problems, n
 | `tests/unit/agents/test_flash_scrub_edge.py` | 14 |
 | `tests/unit/agents/test_flash_step_summarizer.py` | 18 |
 
-Of these 68 failures, 63 construct Google clients without a Google API key, four supply unresolved `Mock` providers, and one fails planner Google-key validation. No real credentials were added to make deterministic fixtures pass. These exact failures already occur at integration `6344605`, before ticket #6 edits. Consequently the specification's all-regression-suites-pass criterion is **not met** in this environment; follow-up fixture repair is needed. Logs: `baseline-test.log`, `final-test.log`, `baseline-lint.log`, `final-lint.log`, `baseline-typecheck.log`, `final-typecheck.log`, `focused-final.log`, all under `/tmp/artemis-spec-1/ticket-6-evidence`.
+Of these 68 failures, 63 construct Google clients without a Google API key, four supply unresolved `Mock` providers, and one fails planner Google-key validation. No real credentials were added to make deterministic fixtures pass. These exact failures already occur at integration `6344605`, before ticket #6 edits. At ticket #6 completion the specification's all-regression-suites-pass criterion was **not met**. The final repair below resolves these fixtures. Logs: `baseline-test.log`, `final-test.log`, `baseline-lint.log`, `final-lint.log`, `baseline-typecheck.log`, `final-typecheck.log`, `focused-final.log`, all under `/tmp/artemis-spec-1/ticket-6-evidence`.
 
 Focused command (same environment):
 
@@ -112,10 +112,47 @@ python scripts/probe_codex_subscription.py --live
 
 For the full Codex run, the existing `configure_local_runtime()` launcher initialized an isolated `/tmp/artemis-spec-1/ticket-6-evidence/live-codex-runtime` state directory before executing the script. The cache-only run was additionally bounded by an outer 580-second process timeout. No live checks were retried to replace a failed outcome.
 
+## Final review disposition (#1, #5, #6)
+
+Both supplied reviews were verified against integration tip `6111f6c`. All four findings were current and in scope; none was rejected as invalid or stale. No live probe was rerun during repair, and the committed observation snapshots are unchanged.
+
+| Finding | Disposition and durable evidence |
+| --- | --- |
+| Spec P1: Codex execution identity belonged to cached model instances | Fixed. `ArtemisContext` owns a Codex scope for its async task lifecycle, which the SDK already enters per task. A context variable carries that scope through inference and inherited background tasks. CLI invocations lazily allocate one empty directory per session, independently of factory model identity. Shutdown drains/cancels background work before cleaning the directory. Standalone adapter calls retain their model-local context. `test_artemis_session_owns_codex_context_across_cached_model_configurations` observes the executable working directory across changed timeout/reasoning, two sessions sharing a cached client, nested scope restoration and session cleanup. Existing per-call cleanup and isolation checks remain green. |
+| Spec P1: failed Codex probes discarded their report | Fixed. Finalization persists JSON via `--output` (default `codex-probe.json`), retains completed observations and partial cache-call usage, marks remaining checks `unexecuted`, and computes both aggregates as false on interruption. The CLI prints the saved report and exits nonzero on failure. Executable-boundary tests cover a failed second sequential tool, process failure, outer timeout, cancellation and the actual CLI failure exit/report. |
+| Spec P2: published Codex cache counts contradicted the snapshot | Fixed above: full-run counts are **8,320 / 0 / 0**, matching `codex.json`. Only the first call hit cache; later-turn acceptance remains unsupported. |
+| Standards P2 smell: duplicated sequential protocol conversation | Accepted and fixed. `scripts/probe_tools.py` owns the synthetic click → dry-run receipt → BACK → dry-run receipt → final-answer conversation. Both callers retain their result names and text normalization. Optional parallel-tool checks remain independent. The standards review found zero hard violations. |
+| Final contract: 68 Flash fixture failures blocked regression acceptance | Fixed only in tests. Five fixture modules opt into explicit Google primary/fallback configuration, inert Google keys and socket rejection through `tests/unit/agents/conftest.py`. Existing assertions and production routing remain intact. All **82 tests** across those files pass, compared with **68 failed / 14 passed** immediately before repair. |
+
+The first post-merge focused run also exposed two order-dependent SDK lifecycle fixtures in `tests/unit/sdk/test_agent_trace_finalization.py`: agent construction required a Google key before reaching their lifecycle assertions. The supervisor authorized a scoped inert-key fixture for those two tests; their existing queue/DataEngine isolation is unchanged. All **7 tests** in that file now pass independently without credentials. Evidence: `red-sdk-fixtures.log` and `green-sdk-fixtures.log`.
+
+Red/green evidence is retained in `/tmp/artemis-spec-1/review-fixes-evidence`: `red-session.log`, `green-session.log`, `red-probe-report.log`, `green-probe-report.log`, `green-shared-probe.log`, `red-flash-fixtures.log`, and `green-flash-fixtures.log`. The session test first failed on different observed working directories. The report tests first failed because failure persistence/CLI output did not exist. These are process-boundary observations, not evidence of real cache hits.
+
+Final required checks use the shared environment without installing dependencies; imports resolve `/private/tmp/artemis-spec-1/ticket-review-fixes/artemis/__init__.py`. The command environment is the same as above, additionally removing `GOOGLE_API_KEY`, `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `OPEN_ROUTER_API_KEY` and `CODEX_API_KEY` for `make test`. No real credentials are required. Required results after repair:
+
+| Command | Result | Evidence under `/tmp/artemis-spec-1/review-fixes-evidence` |
+| --- | --- | --- |
+| `make test` | **2,976 passed, 7 skipped, 8 deselected**, 87 existing warnings, 89.98 seconds | `final-test.log` |
+| `make lint` | **Passed**: 657 files formatted, Ruff clean, quality ratchet passed | `final-lint.log` |
+| `make typecheck` | **Passed**: zero errors/warnings/informations in core analysis | `final-typecheck.log` |
+| Post-merge affected suite below | **142 passed**, 23.32 seconds | `post-merge-affected.log` |
+
+After committing the repairs, `git merge integration/provider-routing-cache` reported already up to date at `6111f6c`. The affected suite was rerun with the same proxy/key removal:
+
+```sh
+python -m pytest tests/unit/test_codex_provider.py tests/unit/test_codex_probe.py \
+  tests/unit/test_magpie_probe.py tests/unit/test_context.py \
+  tests/unit/sdk/test_agent_trace_finalization.py \
+  tests/unit/agents/flash/test_turn_index_snapshot.py \
+  tests/unit/agents/test_flash_runner.py tests/unit/agents/test_flash_runner_ledger.py \
+  tests/unit/agents/test_flash_scrub_edge.py tests/unit/agents/test_flash_step_summarizer.py -q
+```
+
+The full deterministic target now meets regression acceptance. Live limitations below remain independent of that result.
+
 ## Remaining acceptance gaps
 
 - Sol's required sequential tool serialization failed in the observed run. Deterministic transport success does not override that provider/gateway failure.
-- Codex produced no genuine cache hits despite stable related-call execution context. Reported unsupported for these runs; no claim of cache improvement.
-- Full deterministic regression acceptance is blocked by the 68 pre-existing Flash fixture/configuration failures.
+- Codex reported 8,320 cached tokens on the initial full-probe call, but zero on both appended-history calls. Later-turn cache reuse remains unsupported for these observations; the session-scope repair has not been rerun live and establishes no cache improvement.
 - Live CA, WorkBuddy, Anthropic, OpenRouter, generic OpenAI and direct Google behavior is unexecuted. Their routing coverage is deterministic only.
 - Multimodal helper-result continuation and invalid-schema rejection are covered deterministically; the live Explorer check only submitted a synthetic answer. No device or model-quality validation is claimed.
