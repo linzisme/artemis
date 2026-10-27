@@ -26,6 +26,7 @@ import base64
 import io
 import json
 from pathlib import Path
+import sys
 import tempfile
 import time
 from types import SimpleNamespace
@@ -40,6 +41,7 @@ from artemis.llm.codex import CodexChatModel
 from artemis.llm.router import ModelEndpoint, ModelFactory, ModelProvider
 from artemis.mcp.action_specs import operator_shell_tool
 from artemis.services.llm import RobustChatModelWrapper
+from scripts.probe_magpie_responses import check_result
 
 
 async def probe_related_calls(model: CodexChatModel):
@@ -58,8 +60,14 @@ async def probe_related_calls(model: CodexChatModel):
     for turn in range(3):
         start = time.monotonic()
         response = await model.ainvoke(messages)
+        usage = response.usage_metadata or {}
+        cached = usage.get("input_token_details", {}).get("cache_read", 0)
         calls.append(
-            {"seconds": round(time.monotonic() - start, 2), "usage": response.usage_metadata}
+            {
+                "seconds": round(time.monotonic() - start, 2),
+                "usage": response.usage_metadata,
+                "valid": 0 <= cached <= usage.get("input_tokens", 0),
+            }
         )
         messages.extend(
             [response, HumanMessage(content=f"Acknowledge record {turn + 1:04d} as well.")]
@@ -68,12 +76,15 @@ async def probe_related_calls(model: CodexChatModel):
         (call["usage"] or {}).get("input_token_details", {}).get("cache_read", 0)
         for call in calls[1:]
     ]
-    hit = any(count > 0 for count in later_cached)
+    valid = all(call["valid"] for call in calls)
+    hit = valid and any(count > 0 for count in later_cached)
     return {
-        "status": "passed" if hit else "unsupported",
+        "status": "failed" if not valid else "passed" if hit else "unsupported",
         "passed": hit,
         "reason": (
-            "Cached input reported on appended-history calls."
+            "Invalid cache usage; required probe behavior failed."
+            if not valid
+            else "Cached input reported on appended-history calls."
             if hit
             else "Cache reuse was not observed on later calls; caching is unsupported for this "
             "probe run. This does not establish that the provider never caches."
@@ -96,6 +107,9 @@ async def probe(model_name, reasoning_effort="medium", service_tier="fast", *, c
     assert isinstance(model, CodexChatModel), "Fake models must not be used in the live probe"
     result = {"related_call_cache": await probe_related_calls(model)}
     probe_report = {
+        "provider": "codex",
+        "protocol": "codex exec JSON envelope",
+        "endpoint": "CLI-managed ChatGPT subscription",
         "model": model_name,
         "reasoning_effort": reasoning_effort,
         "requested_service_tier": service_tier,
@@ -104,16 +118,19 @@ async def probe(model_name, reasoning_effort="medium", service_tier="fast", *, c
         "checks": result,
     }
     if cache_only:
+        probe_report["mode"] = "cache-only"
+        probe_report["required_checks_passed"] = result["related_call_cache"]["status"] != "failed"
+        probe_report["all_checks_passed"] = result["related_call_cache"]["passed"]
         return probe_report
 
-    async def measure(name, call):
-        start = time.monotonic()
-        value = await call
-        result[name] = {"passed": True, "seconds": round(time.monotonic() - start, 2)}
-        return value
+    async def measure(name, call, validate, *, fatal=True):
+        return await check_result(probe_report, name, call, validate, fatal=fatal)
 
-    text = await measure("text", model.ainvoke("Reply exactly ARTEMIS_CODEX_OK."))
-    assert text.content.strip() == "ARTEMIS_CODEX_OK"
+    text = await measure(
+        "text",
+        model.ainvoke("Reply exactly ARTEMIS_CODEX_OK."),
+        lambda r: r.content.strip() == "ARTEMIS_CODEX_OK",
+    )
     result["text"]["usage"] = text.usage_metadata
     result["text"]["requested_parameters"] = text.response_metadata
 
@@ -128,7 +145,7 @@ async def probe(model_name, reasoning_effort="medium", service_tier="fast", *, c
             "url": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
         },
     }
-    vision = await measure(
+    await measure(
         "vision",
         model.ainvoke(
             [
@@ -143,8 +160,8 @@ async def probe(model_name, reasoning_effort="medium", service_tier="fast", *, c
                 )
             ]
         ),
+        lambda r: r.content.strip().lower() == "blue",
     )
-    assert vision.content.strip().lower() == "blue", vision.content
 
     tools = [operator_shell_tool("click"), operator_shell_tool("press_key")]
     bound = RobustChatModelWrapper(model).bind_tools(tools)
@@ -156,36 +173,72 @@ async def probe(model_name, reasoning_effort="medium", service_tier="fast", *, c
             content="Return exactly two tool calls in this order: click target index 2; press_key BACK."
         ),
     ]
-    action = await measure("operator_multi_action_schema", bound.ainvoke(messages))
-    assert [c["name"] for c in action.tool_calls] == ["click", "press_key"]
-    assert action.tool_calls[0]["args"]["target"] == 2
-    assert action.tool_calls[1]["args"]["key"] == "BACK"
-    # A local protocol fixture is explicitly labelled, not a claim of device execution.
-    messages += [
-        action,
-        *[
-            ToolMessage(
-                content="Protocol fixture receipt: DRY_RUN_ACCEPTED; no device action was performed.",
-                tool_call_id=call["id"],
-            )
-            for call in action.tool_calls
-        ],
-        HumanMessage(
-            content="What receipt did both tools return? Reply only DRY_RUN_ACCEPTED with no more tools."
+    await measure(
+        "tool_calls",
+        bound.ainvoke(messages),
+        lambda r: (
+            [c["name"] for c in r.tool_calls] == ["click", "press_key"]
+            and r.tool_calls[0]["args"]["target"] == 2
+            and r.tool_calls[1]["args"]["key"] == "BACK"
         ),
+        fatal=False,
+    )
+    # A separate conversation makes sequential correctness independent of the
+    # optional same-response capability, including when it emits no calls.
+    messages = [
+        SystemMessage(content="Serialize only the requested tool; never execute actions."),
+        HumanMessage(content="Return exactly one click call with target index 2."),
     ]
-    resumed = await measure("tool_result_continuation", bound.ainvoke(messages))
-    assert not resumed.tool_calls and "DRY_RUN_ACCEPTED" in resumed.content
-
-    report = await measure(
+    first_action = await measure(
+        "sequential_first_tool",
+        bound.ainvoke(messages),
+        lambda r: (
+            len(r.tool_calls) == 1
+            and r.tool_calls[0]["name"] == "click"
+            and r.tool_calls[0]["args"]["target"] == 2
+        ),
+    )
+    messages += [
+        first_action,
+        ToolMessage(
+            content="DRY_RUN_ACCEPTED; protocol fixture only, no device action performed.",
+            tool_call_id=first_action.tool_calls[0]["id"],
+        ),
+        HumanMessage(content="Now return exactly one press_key BACK call."),
+    ]
+    second = await measure(
+        "sequential_second_tool",
+        bound.ainvoke(messages),
+        lambda r: (
+            len(r.tool_calls) == 1
+            and r.tool_calls[0]["name"] == "press_key"
+            and r.tool_calls[0]["args"]["key"] == "BACK"
+        ),
+    )
+    messages += [
+        second,
+        ToolMessage(
+            content="DRY_RUN_ACCEPTED; protocol fixture only, no device action performed.",
+            tool_call_id=second.tool_calls[0]["id"],
+        ),
+        HumanMessage(content="Return only DRY_RUN_ACCEPTED with no more tool calls."),
+    ]
+    await measure(
+        "tool_result_continuation",
+        bound.ainvoke(messages),
+        lambda r: not r.tool_calls and r.content.strip() == "DRY_RUN_ACCEPTED",
+    )
+    await measure(
         "checker_schema",
         RobustChatModelWrapper(model)
         .with_structured_output(CheckReport)
         .ainvoke(
             "Return one assert verdict: item_text 'blue square', status passed, evidence 'synthetic image is blue', suggestion empty. No unmet subgoals."
         ),
+        lambda r: (
+            len(r.verdicts) == 1 and r.verdicts[0].status == "passed" and not r.unmet_subgoals
+        ),
     )
-    assert report.verdicts[0].status == "passed"
 
     config = LLMConfig.model_validate(
         _expand_default_into_nodes(
@@ -207,32 +260,47 @@ async def probe(model_name, reasoning_effort="medium", service_tier="fast", *, c
         )
     )
     context = SimpleNamespace(llm_config=config, data_engine=None)
+    context.agent_config = SimpleNamespace(
+        denylisted_tools={
+            "explorer": [
+                "ask_perception_tool",
+                "detect_objects",
+                "get_ocr_list",
+                "ask_image_processor",
+                "inspect_region",
+            ]
+        }
+    )
     explorer = Explorer(context)
-    explorer.denylisted_tools = {
-        "ask_perception_tool",
-        "detect_objects",
-        "get_ocr_list",
-        "ask_image_processor",
-        "inspect_region",
-    }
     with tempfile.TemporaryDirectory(prefix="artemis-probe-") as directory:
         screenshot = Path(directory) / "synthetic.png"
         image.save(screenshot)
         answer = await measure(
             "explorer_universal_loop",
-            explorer._run_universal(
+            explorer.run(
                 query="Find the centre of the blue square.",
                 context_feedback="",
                 screenshot_path=str(screenshot),
                 state={},
                 minimal_list="",
-                prompt_template="Locate the requested square. Submit one candidate with normalized 0-1000 centre coordinates.",
-                max_turns=1,
+                version="pro",
+            ),
+            lambda r: (
+                bool(json.loads(r)["candidates"])
+                and all(abs(v - 500) <= 50 for v in json.loads(r)["candidates"][0]["coords"])
             ),
         )
     candidates = json.loads(answer)["candidates"]
-    assert candidates and all(abs(v - 500) <= 50 for v in candidates[0]["coords"])
     result["explorer_universal_loop"]["coords"] = candidates[0]["coords"]
+    probe_report["required_checks_passed"] = (
+        all(
+            row["passed"]
+            for name, row in result.items()
+            if name not in {"tool_calls", "related_call_cache"}
+        )
+        and result["related_call_cache"]["status"] != "failed"
+    )
+    probe_report["all_checks_passed"] = all(row["passed"] for row in result.values())
     return probe_report
 
 
@@ -248,13 +316,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if not args.live:
         parser.error("Pass --live to explicitly allow subscription calls")
-    print(
-        json.dumps(
-            asyncio.run(
-                probe(
-                    args.model, args.reasoning_effort, args.service_tier, cache_only=args.cache_only
-                )
-            ),
-            indent=2,
+    result = asyncio.run(
+        asyncio.wait_for(
+            probe(args.model, args.reasoning_effort, args.service_tier, cache_only=args.cache_only),
+            timeout=1200,
         )
     )
+    print(json.dumps(result, indent=2))
+    sys.exit(0 if result["required_checks_passed"] else 1)

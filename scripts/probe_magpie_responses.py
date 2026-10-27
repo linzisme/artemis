@@ -27,7 +27,8 @@ REQUIRED_CHECKS = frozenset(
     {
         "text",
         "vision",
-        "tool_calls",
+        "sequential_first_tool",
+        "sequential_second_tool",
         "tool_continuation",
         "checker",
         "hopper",
@@ -44,12 +45,20 @@ def cache_reused(message):
     return text_content(message) == "CACHE_OK" and 0 < cached <= usage.get("input_tokens", 0)
 
 
-def all_checks_passed(report):
+def required_checks_passed(report):
     checks = report["checks"]
     return (
         bool(report.get("completed"))
         and REQUIRED_CHECKS.issubset(checks)
-        and all(row["passed"] for row in checks.values())
+        and all(checks[name]["passed"] for name in REQUIRED_CHECKS)
+    )
+
+
+def all_checks_passed(report):
+    return (
+        required_checks_passed(report)
+        and "tool_calls" in report["checks"]
+        and all(row["passed"] for row in report["checks"].values())
     )
 
 
@@ -61,7 +70,13 @@ async def check_result(report, name, call, validate, *, fatal=True):
         value = await asyncio.wait_for(call, timeout=180)
         assert validate(value), f"{name}: unexpected result"
     except (Exception, asyncio.CancelledError) as exc:
-        report["checks"][name] = {"passed": False, "error_type": type(exc).__name__}
+        report["checks"][name] = {
+            "passed": False,
+            "status": "unsupported" if name == "tool_calls" and value is not None else "failed",
+            "error_type": type(exc).__name__,
+        }
+        if hasattr(value, "usage_metadata"):
+            report["checks"][name]["usage"] = value.usage_metadata
         if hasattr(value, "tool_calls"):
             report["checks"][name]["observed_tool_calls"] = value.tool_calls
             report["checks"][name]["observed_text"] = text_content(value)
@@ -69,7 +84,7 @@ async def check_result(report, name, call, validate, *, fatal=True):
         if fatal or isinstance(exc, asyncio.CancelledError):
             raise
         return value
-    row = {"passed": True, "seconds": round(time.monotonic() - started, 2)}
+    row = {"passed": True, "status": "passed", "seconds": round(time.monotonic() - started, 2)}
     if hasattr(value, "usage_metadata"):
         row["usage"] = value.usage_metadata
         row["served_tier"] = value.response_metadata.get("service_tier")
@@ -100,10 +115,13 @@ async def probe(output: Path, *, profile_name: str = "magpie-sol.jsonc"):
     ctx = SimpleNamespace(llm_config=config, data_engine=None)
     endpoint = _resolve_endpoint(ctx, "operator")
     assert endpoint.use_responses_api, "This probe requires a Responses profile"
+    model = ModelFactory.create_model(endpoint)
     report = {
         "profile": profile_name,
         "model": endpoint.model_name,
-        "base_url": "http://127.0.0.1:3425/v1",
+        "provider": endpoint.provider.value,
+        "protocol": "responses",
+        "base_url": endpoint.api_base or str(model.openai_api_base),
         "reasoning_effort": endpoint.reasoning_effort,
         "requested_service_tier": endpoint.service_tier,
         "device_actions_executed": False,
@@ -117,7 +135,8 @@ async def probe(output: Path, *, profile_name: str = "magpie-sol.jsonc"):
     async def audited_send(client, request, *args, **kwargs):
         if request.method == "POST":
             body = json.loads(request.content)
-            assert str(request.url).startswith(report["base_url"] + "/responses")
+            assert str(request.url) == report["base_url"].rstrip("/") + "/responses"
+            assert "previous_response_id" not in body
             assert body.get("model") == report["model"]
             assert body.get("reasoning", {}).get("effort") == report["reasoning_effort"]
             assert body.get("service_tier") == report["requested_service_tier"]
@@ -133,8 +152,6 @@ async def probe(output: Path, *, profile_name: str = "magpie-sol.jsonc"):
                 }
             )
         return await original_send(client, request, *args, **kwargs)
-
-    model = ModelFactory.create_model(endpoint)
 
     check = partial(check_result, report)
 
@@ -186,7 +203,7 @@ async def probe(output: Path, *, profile_name: str = "magpie-sol.jsonc"):
                 content="Return exactly two tool calls in order: click target index 2; press_key BACK."
             ),
         ]
-        action = await check(
+        await check(
             "tool_calls",
             bound.ainvoke(messages),
             lambda r: (
@@ -196,40 +213,46 @@ async def probe(output: Path, *, profile_name: str = "magpie-sol.jsonc"):
             ),
             fatal=False,
         )
-        assert action is not None and action.tool_calls, "No valid tool call returned"
-        messages += [
-            action,
-            *[
-                ToolMessage(
-                    content="DRY_RUN_ACCEPTED; protocol fixture only, no device action performed.",
-                    tool_call_id=c["id"],
-                )
-                for c in action.tool_calls
-            ],
+        # A separate conversation makes sequential correctness independent of the
+        # optional same-response capability, including when it emits no calls.
+        messages = [
+            SystemMessage(content="Serialize only the requested tool; never execute actions."),
+            HumanMessage(content="Return exactly one click call with target index 2."),
         ]
-        if [c["name"] for c in action.tool_calls] == ["click"]:
-            # Keep the failed parallel-call result, then independently test the
-            # one-action-per-turn execution used by the current mobile runner.
-            messages.append(HumanMessage(content="Now return the remaining press_key BACK call."))
-            second = await check(
-                "sequential_second_tool",
-                bound.ainvoke(messages),
-                lambda r: (
-                    len(r.tool_calls) == 1
-                    and r.tool_calls[0]["name"] == "press_key"
-                    and r.tool_calls[0]["args"]["key"] == "BACK"
-                ),
-            )
-            messages += [
-                second,
-                ToolMessage(
-                    content="DRY_RUN_ACCEPTED; protocol fixture only, no device action performed.",
-                    tool_call_id=second.tool_calls[0]["id"],
-                ),
-            ]
-        messages.append(
-            HumanMessage(content="Return only DRY_RUN_ACCEPTED with no more tool calls.")
+        first_action = await check(
+            "sequential_first_tool",
+            bound.ainvoke(messages),
+            lambda r: (
+                len(r.tool_calls) == 1
+                and r.tool_calls[0]["name"] == "click"
+                and r.tool_calls[0]["args"]["target"] == 2
+            ),
         )
+        messages += [
+            first_action,
+            ToolMessage(
+                content="DRY_RUN_ACCEPTED; protocol fixture only, no device action performed.",
+                tool_call_id=first_action.tool_calls[0]["id"],
+            ),
+            HumanMessage(content="Now return exactly one press_key BACK call."),
+        ]
+        second = await check(
+            "sequential_second_tool",
+            bound.ainvoke(messages),
+            lambda r: (
+                len(r.tool_calls) == 1
+                and r.tool_calls[0]["name"] == "press_key"
+                and r.tool_calls[0]["args"]["key"] == "BACK"
+            ),
+        )
+        messages += [
+            second,
+            ToolMessage(
+                content="DRY_RUN_ACCEPTED; protocol fixture only, no device action performed.",
+                tool_call_id=second.tool_calls[0]["id"],
+            ),
+            HumanMessage(content="Return only DRY_RUN_ACCEPTED with no more tool calls."),
+        ]
         await check(
             "tool_continuation",
             bound.ainvoke(messages),
@@ -259,27 +282,30 @@ async def probe(output: Path, *, profile_name: str = "magpie-sol.jsonc"):
             ),
             lambda r: r.found and r.output == "com.android.settings",
         )
+        ctx.agent_config = SimpleNamespace(
+            denylisted_tools={
+                "explorer": [
+                    "ask_perception_tool",
+                    "detect_objects",
+                    "get_ocr_list",
+                    "ask_image_processor",
+                    "inspect_region",
+                ]
+            }
+        )
         explorer = Explorer(ctx)
-        explorer.denylisted_tools = {
-            "ask_perception_tool",
-            "detect_objects",
-            "get_ocr_list",
-            "ask_image_processor",
-            "inspect_region",
-        }
         with tempfile.TemporaryDirectory(prefix="magpie-probe-") as temp:
             path = Path(temp) / "synthetic.png"
             image.save(path)
             await check(
                 "explorer",
-                explorer._run_universal(
+                explorer.run(
                     query="Find the centre of the blue square.",
                     context_feedback="",
                     screenshot_path=str(path),
                     state={},
                     minimal_list="",
-                    prompt_template="Locate the square. Submit one candidate with normalized 0-1000 centre coordinates.",
-                    max_turns=1,
+                    version="pro",
                 ),
                 lambda r: (
                     bool(json.loads(r)["candidates"])
@@ -306,6 +332,9 @@ async def probe(output: Path, *, profile_name: str = "magpie-sol.jsonc"):
     finally:
         httpx2.AsyncClient.send = original_send
         report["all_checks_passed"] = all_checks_passed(report)
+        report["required_checks_passed"] = required_checks_passed(report)
+        for name in (REQUIRED_CHECKS | {"tool_calls"}) - report["checks"].keys():
+            report["checks"][name] = {"passed": False, "status": "unexecuted"}
         (output / "probe.json").write_text(json.dumps(report, indent=2) + "\n")
     return report
 
@@ -324,8 +353,6 @@ if __name__ == "__main__":
         parser.error("Pass --live to allow real Magpie model calls")
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    result = asyncio.run(
-        asyncio.wait_for(probe(output, profile_name=args.profile), timeout=1200)
-    )
+    result = asyncio.run(asyncio.wait_for(probe(output, profile_name=args.profile), timeout=1200))
     print(json.dumps(result, indent=2))
-    sys.exit(0 if result["all_checks_passed"] else 1)
+    sys.exit(0 if result["required_checks_passed"] else 1)
