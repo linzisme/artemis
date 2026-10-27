@@ -121,7 +121,7 @@ class LLMConfig(LLMConfigBase):
             if item == "history_analyzer":
                 return self.operator
             elif item in ("validator_pixel_safety_net", "planner_validation"):
-                if self.operator.provider == "codex" or self.operator.use_responses_api:
+                if self.operator.provider != "google":
                     return self.operator
                 # Both are cheap, high-frequency judges: the pixel safety net
                 # runs before actions, the planner validator after every
