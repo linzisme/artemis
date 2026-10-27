@@ -18,11 +18,13 @@ from artemis.llm.router import ModelEndpoint, ModelFactory, ModelProvider
 
 import asyncio
 import base64
+import gc
 import io
 import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 
 import pytest
 from langchain_core.messages import HumanMessage, ToolMessage
@@ -47,17 +49,26 @@ if sys.argv[1:] == ["login", "status"]:
 prompt=sys.stdin.read()
 args=sys.argv[1:]
 images=[pathlib.Path(args[i+1]) for i,v in enumerate(args) if v == "--image"]
-pathlib.Path({str(receipt)!r}).write_text(json.dumps({{
+recorded=json.dumps({{
     "prompt":prompt,"cwd":os.getcwd(),"pid":os.getpid(),"args":args,
     "api_key_present":"OPENAI_API_KEY" in os.environ or "CODEX_API_KEY" in os.environ,
     "images":[{{"bytes":list(p.read_bytes()),"mode":p.stat().st_mode & 511}} for p in images]
-}}))
+}})
+pathlib.Path({str(receipt)!r}).write_text(recorded)
+with pathlib.Path({str(receipt.with_suffix(".jsonl"))!r}).open("a") as stream:
+    stream.write(recorded + "\\n")
 time.sleep(cfg.get("sleep",0))
 if cfg.get("error"):
     print(json.dumps({{"type":"turn.failed","error":{{"message":cfg["error"]}}}}))
     sys.exit(1)
 pathlib.Path(args[args.index("--output-last-message")+1]).write_text(json.dumps(cfg["response"]))
-print(json.dumps({{"type":"turn.completed","usage":{{"input_tokens":23,"output_tokens":7}}}}))
+if cfg.get("builtin"):
+    print(json.dumps({{"type":"item.completed","item":{{"type":"command_execution"}}}}))
+usage=cfg.get("cached_input_tokens",0)
+if isinstance(usage,list):
+    index=len(pathlib.Path({str(receipt.with_suffix(".jsonl"))!r}).read_text().splitlines())-1
+    usage=usage[index]
+print(json.dumps({{"type":"turn.completed","usage":{{"input_tokens":23,"output_tokens":7,"cached_input_tokens":usage}}}}))
 """)
     executable.chmod(0o700)
 
@@ -82,7 +93,10 @@ async def test_text_call_has_usage_no_keys_and_cleans_temporary_files(cli, monke
     assert result.usage_metadata["total_tokens"] == 30
     recorded = json.loads(receipt.read_text())
     assert not recorded["api_key_present"]
-    assert not Path(recorded["cwd"]).exists()
+    for flag in ("--output-schema", "--output-last-message", "--image"):
+        for index, argument in enumerate(recorded["args"]):
+            if argument == flag:
+                assert not Path(recorded["args"][index + 1]).parent.exists()
     assert "--ignore-user-config" in recorded["args"]
 
 
@@ -114,6 +128,61 @@ async def test_real_action_declarations_and_tool_result_history(cli):
     )
     recorded = json.loads(receipt.read_text())["prompt"]
     assert "clicked" in recorded and result.tool_calls[0]["id"] in recorded
+
+
+@pytest.mark.asyncio
+async def test_related_calls_keep_empty_execution_context_through_tool_results(cli, inline_image):
+    from artemis.mcp.action_specs import operator_shell_tool
+
+    configure, receipt = cli
+    model = configure(
+        {"content": "", "tool_calls": [{"name": "press_key", "arguments_json": '{"key":"BACK"}'}]}
+    )
+    bound = model.bind_tools([operator_shell_tool("press_key")])
+    messages = [HumanMessage(content="Return BACK, then acknowledge its receipt.")]
+    action = await bound.ainvoke(messages)
+    first = json.loads(receipt.read_text())
+    configure()
+    result = await bound.ainvoke(
+        [
+            *messages,
+            action,
+            ToolMessage(
+                content=[{"type": "text", "text": "DRY_RUN_ACCEPTED"}, inline_image],
+                tool_call_id=action.tool_calls[0]["id"],
+            ),
+        ]
+    )
+    second = json.loads(receipt.read_text())
+    assert first["cwd"] == second["cwd"]
+    assert list(Path(second["cwd"]).iterdir()) == []
+    assert "DRY_RUN_ACCEPTED" in second["prompt"]
+    assert "[image 1]" in second["prompt"]
+    assert len(second["images"]) == 1
+    assert action.tool_calls[0]["id"] in second["prompt"]
+    assert result.content == "ready"
+    for recorded in (first, second):
+        args = recorded["args"]
+        assert Path(args[args.index("--cd") + 1]).resolve() == Path(recorded["cwd"])
+        assert args[args.index("--sandbox") + 1] == "read-only"
+        assert {"--ephemeral", "--ignore-user-config", "--no-daemon"} <= set(args)
+        assert 'approval_policy="never"' in args
+        assert 'web_search="disabled"' in args
+        for feature in (
+            "shell_tool",
+            "unified_exec",
+            "plugins",
+            "apps",
+            "hooks",
+            "multi_agent",
+            "browser_use",
+            "computer_use",
+            "memories",
+            "view_image",
+        ):
+            assert f"features.{feature}=false" in args
+        for flag in ("--output-schema", "--output-last-message"):
+            assert not Path(args[args.index(flag) + 1]).parent.exists()
 
 
 @pytest.mark.asyncio
@@ -150,7 +219,10 @@ async def test_images_preserve_order_and_cleanup(cli):
     ]
     assert colours == [(255, 0, 0), (0, 0, 255)]
     assert all(v["mode"] == 0o600 for v in recorded["images"])
-    assert not Path(recorded["cwd"]).exists()
+    for flag in ("--output-schema", "--output-last-message", "--image"):
+        for index, argument in enumerate(recorded["args"]):
+            if argument == flag:
+                assert not Path(recorded["args"][index + 1]).parent.exists()
 
 
 @pytest.mark.asyncio
@@ -158,13 +230,14 @@ async def test_structured_output_validates_domain_schema(cli):
     class Verdict(BaseModel):
         passed: bool
 
-    configure, _ = cli
-    result = (
-        await configure({"result_json": '{"passed":true}'})
-        .with_structured_output(Verdict)
-        .ainvoke("check")
-    )
+    configure, receipt = cli
+    model = configure()
+    await model.ainvoke("hello")
+    first_context = json.loads(receipt.read_text())["cwd"]
+    configure({"result_json": '{"passed":true}'})
+    result = await model.with_structured_output(Verdict).ainvoke("check")
     assert result.passed is True
+    assert json.loads(receipt.read_text())["cwd"] == first_context
     with pytest.raises(CodexError, match="schema validation"):
         await (
             configure({"result_json": '{"passed":"wrong"}'})
@@ -211,7 +284,10 @@ async def test_timeout_and_cancel_kill_process_and_remove_files(cli, cancel):
     with pytest.raises(asyncio.CancelledError if cancel else CodexError):
         await task
     recorded = json.loads(receipt.read_text())
-    assert not Path(recorded["cwd"]).exists()
+    for flag in ("--output-schema", "--output-last-message", "--image"):
+        for index, argument in enumerate(recorded["args"]):
+            if argument == flag:
+                assert not Path(recorded["args"][index + 1]).parent.exists()
     with pytest.raises(ProcessLookupError):
         os.kill(recorded["pid"], 0)
 
@@ -361,3 +437,134 @@ def test_api_profiles_keep_legacy_google_memory(provider, monkeypatch):
     ctx = SimpleNamespace(llm_config=SimpleNamespace(summarizer=SimpleNamespace(provider=provider)))
     model = get_memory_llm(ctx, "gemini-3.8-flash")
     assert isinstance(model, ChatGoogleGenerativeAI)
+
+
+@pytest.fixture
+def inline_image():
+    buffer = io.BytesIO()
+    Image.new("RGB", (16, 16), "blue").save(buffer, format="PNG")
+    return {
+        "type": "image_url",
+        "image_url": {
+            "url": "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
+        },
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure", ["success", "process", "envelope", "builtin", "timeout", "cancel"]
+)
+async def test_call_artifacts_are_removed_for_every_exit(cli, inline_image, failure):
+    configure, receipt = cli
+    options = {
+        "success": {},
+        "process": {"error": "unsupported model"},
+        "envelope": {"response": {"invalid": True}},
+        "builtin": {"builtin": True},
+        "timeout": {"sleep": 30},
+        "cancel": {"sleep": 30},
+    }[failure]
+    model = configure(**options)
+    model.timeout_seconds = 0.3
+    task = asyncio.create_task(model.ainvoke([HumanMessage(content=[inline_image])]))
+    for _ in range(100):
+        if receipt.exists():
+            break
+        await asyncio.sleep(0.01)
+    assert receipt.exists()
+    recorded = json.loads(receipt.read_text())
+    args = recorded["args"]
+    artifacts = [
+        Path(args[args.index(flag) + 1])
+        for flag in ("--output-schema", "--output-last-message", "--image")
+    ]
+    if failure == "cancel":
+        task.cancel()
+    if failure == "success":
+        await task
+    else:
+        with pytest.raises(asyncio.CancelledError if failure == "cancel" else CodexError):
+            await task
+    assert all(not path.parent.exists() for path in artifacts)
+    assert list(Path(recorded["cwd"]).iterdir()) == []
+    with pytest.raises(ProcessLookupError):
+        os.kill(recorded["pid"], 0)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_calls_share_context_with_disjoint_artifacts(cli, inline_image):
+    configure, receipt = cli
+    model = configure(sleep=0.1)
+    await asyncio.gather(*(model.ainvoke([HumanMessage(content=[inline_image])]) for _ in range(2)))
+    first, second = [
+        json.loads(line) for line in receipt.with_suffix(".jsonl").read_text().splitlines()
+    ]
+    assert first["cwd"] == second["cwd"]
+    for flag in ("--output-schema", "--output-last-message", "--image"):
+        paths = [
+            Path(recorded["args"][recorded["args"].index(flag) + 1]) for recorded in (first, second)
+        ]
+        assert paths[0].parent != paths[1].parent
+        assert all(not path.parent.exists() for path in paths)
+    assert list(Path(first["cwd"]).iterdir()) == []
+
+
+def test_model_context_lifetime_and_independent_model_isolation(cli):
+    configure, receipt = cli
+    first = configure()
+    first.invoke("hello")
+    first_context = Path(json.loads(receipt.read_text())["cwd"])
+    second = configure()
+    second.invoke("hello")
+    second_context = Path(json.loads(receipt.read_text())["cwd"])
+    assert first_context != second_context
+    assert first_context.is_dir() and second_context.is_dir()
+    del first
+    gc.collect()
+    assert not first_context.exists()
+    assert second_context.is_dir()
+    del second
+    gc.collect()
+    assert not second_context.exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("cached_tokens", "status"), [([0, 11, 17], "passed"), ([11, 0, 0], "unsupported")]
+)
+async def test_related_call_probe_reports_only_later_cached_input(cli, cached_tokens, status):
+    from scripts.probe_codex_subscription import probe_related_calls
+
+    configure, receipt = cli
+    model = configure(cached_input_tokens=cached_tokens)
+    report = await probe_related_calls(model)
+    assert report["status"] == status
+    assert report["passed"] == (status == "passed")
+    assert report["later_cached_input_tokens"] == cached_tokens[1:]
+    assert [
+        call["usage"]["input_token_details"]["cache_read"] for call in report["calls"]
+    ] == cached_tokens
+    if status == "unsupported":
+        assert "not observed" in report["reason"]
+    calls = [json.loads(line) for line in receipt.with_suffix(".jsonl").read_text().splitlines()]
+    assert len(calls) == 3
+    assert len({call["cwd"] for call in calls}) == 1
+    transcripts = [json.loads(call["prompt"].split("\n", 1)[1])["messages"] for call in calls]
+    assert len(transcripts[0][0]["content"][0]) > 16000
+    assert transcripts[1][:2] == transcripts[0]
+    assert transcripts[2][:4] == transcripts[1]
+    assert transcripts[1][2]["content"] == ["ready"]
+
+
+def test_model_context_is_removed_at_process_exit(cli):
+    configure, receipt = cli
+    executable = configure().executable
+    script = (
+        "from artemis.llm.codex import CodexChatModel; "
+        f"model = CodexChatModel(model_name='test', executable={executable!r}); "
+        "model.invoke('hello')"
+    )
+    subprocess.run([sys.executable, "-c", script], check=True, timeout=30)
+    recorded = json.loads(receipt.read_text())
+    assert not Path(recorded["cwd"]).exists()
