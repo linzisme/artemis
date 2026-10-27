@@ -132,9 +132,21 @@ Final required checks use the shared environment without installing dependencies
 
 | Command | Result | Evidence under `/tmp/artemis-spec-1/review-fixes-evidence` |
 | --- | --- | --- |
-| `make test` | **2,976 passed, 7 skipped, 8 deselected**, 87 existing warnings, 95.04 seconds | `final-test.log` |
+| `make test` | **2,976 passed, 7 skipped, 8 deselected**, 87 existing warnings, 89.98 seconds | `final-test.log` |
 | `make lint` | **Passed**: 657 files formatted, Ruff clean, quality ratchet passed | `final-lint.log` |
 | `make typecheck` | **Passed**: zero errors/warnings/informations in core analysis | `final-typecheck.log` |
+| Post-merge affected suite below | **142 passed**, 23.32 seconds | `post-merge-affected.log` |
+
+After committing the repairs, `git merge integration/provider-routing-cache` reported already up to date at `6111f6c`. The affected suite was rerun with the same proxy/key removal:
+
+```sh
+python -m pytest tests/unit/test_codex_provider.py tests/unit/test_codex_probe.py \
+  tests/unit/test_magpie_probe.py tests/unit/test_context.py \
+  tests/unit/sdk/test_agent_trace_finalization.py \
+  tests/unit/agents/flash/test_turn_index_snapshot.py \
+  tests/unit/agents/test_flash_runner.py tests/unit/agents/test_flash_runner_ledger.py \
+  tests/unit/agents/test_flash_scrub_edge.py tests/unit/agents/test_flash_step_summarizer.py -q
+```
 
 The full deterministic target now meets regression acceptance. Live limitations below remain independent of that result.
 
