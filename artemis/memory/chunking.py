@@ -301,14 +301,8 @@ class StepCapsuleLens(StepLens):
         self._model_name = model_name or "gemini-3.8-flash"
         self._llm = llm
         self._ctx = ctx
-        # Availability hardening: `chunking.model` is a dedicated model with no
-        # gateway behind it — when that one endpoint is down (e.g. a day-long
-        # 503), every capsule dies and chunk headers stay pending forever. A
-        # configured fallback model turns a provider outage into a degraded
-        # attempt instead of a dead loop.
-        self._fallback_model_name = (
-            fallback_model_name if fallback_model_name != self._model_name else None
-        )
+        # A fallback may share the model name but use a different provider.
+        self._fallback_model_name = fallback_model_name
         self._fallback_llm = fallback_llm
         try:
             self._prompt = self._PROMPT_PATH.read_text(encoding="utf-8")
@@ -953,8 +947,8 @@ class HistoryChunkManager:
         """Fallback model for capsule generation when `chunking.model` is down.
 
         Resolved from the LLM config's summarizer role (which inherits the
-        global default fallback unless overridden). Codex stays on its own
-        provider; API profiles retain the legacy Google-only fallback.
+        global default fallback unless overridden). Only Codex forbids a
+        cross-provider fallback; other roles honor the configured endpoint.
         """
         try:
             llm_cfg = getattr(ctx, "llm_config", None) if ctx is not None else None
@@ -962,14 +956,18 @@ class HistoryChunkManager:
                 from artemis.config.llm import get_default_llm_config
 
                 llm_cfg = get_default_llm_config()
-            fallback = getattr(getattr(llm_cfg, "summarizer", None), "fallback", None)
+            summarizer = getattr(llm_cfg, "summarizer", None)
+            fallback = getattr(summarizer, "fallback", None)
             provider = str(getattr(fallback, "provider", "") or "")
             model = getattr(fallback, "model", None)
-            primary = getattr(getattr(llm_cfg, "summarizer", None), "provider", "google")
-            compatible = (primary == "codex" and provider == "codex") or (
-                primary != "codex" and is_google_provider(provider)
+            primary = getattr(summarizer, "provider", "google")
+            primary_model = (
+                self._model_name
+                if is_google_provider(primary)
+                else getattr(summarizer, "model", None)
             )
-            if model and compatible and model != self._model_name:
+            compatible = primary != "codex" or provider == "codex"
+            if model and compatible and (provider != primary or model != primary_model):
                 return str(model)
         except Exception as exc:
             logger.debug(f"Capsule fallback model resolution skipped: {exc}", exc_info=True)

@@ -578,11 +578,19 @@ class RobustChatModelWrapper:
                     tool_config.setdefault("include_server_side_tool_invocations", True)
                     kwargs["tool_config"] = tool_config
         else:
-            # If not Gemini/Google (e.g. OpenAI, Anthropic, Ollama, OpenRouter, XAI):
-            # Ignore grounding and filter out any Gemini-specific built-in dict tools to avoid provider errors
+            # Google built-ins are provider-executed, not ARTEMIS tools.
+            google_builtins = {
+                "google_search",
+                "google_search_retrieval",
+                "google_maps",
+                "code_execution",
+            }
             processed_tools = [
-                t for t in processed_tools if not (isinstance(t, dict) and "google_search" in t)
+                t
+                for t in processed_tools
+                if not (isinstance(t, dict) and google_builtins.intersection(t))
             ]
+            kwargs.pop("tool_config", None)
 
         bound = self.base_model.bind_tools(processed_tools, *other_args, **kwargs)
         return RobustChatModelWrapper(bound, self.ctx, endpoint=self.endpoint)
@@ -943,23 +951,18 @@ def _resolve_endpoint(
 
 
 def get_memory_llm(ctx=None, model_name: str | None = None, *, use_fallback=False):
-    """Honor Codex/Responses/Magpie routing; preserve other legacy memory defaults."""
+    """Resolve memory through the summarizer role.
+
+    Model-only auxiliary overrides belong to the legacy Google path. For a
+    non-Google role, configure the summarizer endpoint (including its fallback)
+    to choose a model; this keeps legacy Gemini defaults off other providers.
+    """
     ctx = ctx if ctx is not None else SimpleNamespace(llm_config=get_default_llm_config())
-    config = getattr(ctx, "llm_config", None)
-    if config is None:
-        config = get_default_llm_config()
-        ctx.llm_config = config
-    summarizer = getattr(config, "summarizer", None)
-    if not (
-        getattr(summarizer, "provider", None) == "codex"
-        or str(getattr(summarizer, "model", "")).startswith(("workbuddy/", "ca/"))
-    ) and not getattr(summarizer, "use_responses_api", False):
+    primary = _resolve_endpoint(ctx, "summarizer")
+    if primary.provider == ModelProvider.GOOGLE and not use_fallback:
         return get_google_llm(model_name=model_name or "gemini-3.8-flash", temperature=0.0)
     endpoint = _resolve_endpoint(ctx, "summarizer", use_fallback=use_fallback)
-    updates = {"temperature": 0.0}
-    if model_name:
-        updates["model_name"] = model_name
-    return ModelFactory.get_model(endpoint.model_copy(update=updates))
+    return ModelFactory.get_model(endpoint)
 
 
 def _get_llm(

@@ -83,7 +83,6 @@ from artemis.memory.transcript import PRO_UI_LIST_MARKER, TranscriptLedger, mark
 from artemis.services.llm import (
     RobustChatModelWrapper,
     acomplete,
-    get_google_llm,
     get_llm,
     invoke_llm_with_timeout_message,
 )
@@ -279,25 +278,7 @@ class FlashRunner:
 
     def _init_llm(self):
         """Initializes the Universal LLM via the Service Layer."""
-        operator = getattr(getattr(self.ctx, "llm_config", None), "operator", None)
-        if (
-            getattr(operator, "provider", None) == "codex"
-            or str(getattr(operator, "model", "")).startswith(("workbuddy/", "ca/"))
-        ) or getattr(operator, "use_responses_api", False):
-            return get_llm(self.ctx, name="operator")
-        try:
-            return get_llm(self.ctx, name="operator")
-        except Exception as e:
-            # get_llm may have loaded the context lazily before failing.
-            operator = getattr(getattr(self.ctx, "llm_config", None), "operator", None)
-            if (
-                getattr(operator, "provider", None) == "codex"
-                or str(getattr(operator, "model", "")).startswith(("workbuddy/", "ca/"))
-            ) or getattr(operator, "use_responses_api", False):
-                raise
-            logger.warning(f"Failed to get operator LLM from config, using default: {e}")
-
-            return RobustChatModelWrapper(get_google_llm(model_name="gemini-2.5-flash"), self.ctx)
+        return get_llm(self.ctx, name="operator")
 
     def _render_system_prompt(self, tools_declaration: list) -> str:
         """Renders the system prompt from the flash_runner.md template.
