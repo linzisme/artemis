@@ -21,6 +21,8 @@ import json
 from google.genai import types
 
 from artemis.agents.explorer.explorer import Explorer
+from artemis.config import settings
+from pydantic import SecretStr
 from artemis.context import ArtemisContext
 from artemis.graph.state import State
 
@@ -39,6 +41,11 @@ def disable_file_api(monkeypatch):
     monkeypatch.setenv("ARTEMIS_USE_FILE_API", "false")
 
 
+@pytest.fixture(autouse=True)
+def google_credentials(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", SecretStr("synthetic-google-key"))
+
+
 @pytest.mark.asyncio
 async def test_explorer_run():
     # Mock context and state
@@ -50,6 +57,7 @@ async def test_explorer_run():
     mock_ctx.data_engine.base_dir = "/tmp/test_session"
     mock_ctx.llm_config = MagicMock()
     mock_ctx.llm_config.explorer = MagicMock()
+    mock_ctx.llm_config.explorer.provider = "google"
     mock_ctx.llm_config.explorer.model = "gemini-3.7-flash"
 
     mock_state = MagicMock(spec=State)
@@ -138,6 +146,7 @@ async def test_explorer_submit_answer():
     mock_ctx.data_engine.base_dir = "/tmp/test_session"
     mock_ctx.llm_config = MagicMock()
     mock_ctx.llm_config.explorer = MagicMock()
+    mock_ctx.llm_config.explorer.provider = "google"
     mock_ctx.llm_config.explorer.model = "gemini-3.7-flash"
 
     mock_state = MagicMock(spec=State)
@@ -226,6 +235,7 @@ async def test_explorer_submit_answer_self_correction():
     mock_ctx.data_engine.base_dir = "/tmp/test_session"
     mock_ctx.llm_config = MagicMock()
     mock_ctx.llm_config.explorer = MagicMock()
+    mock_ctx.llm_config.explorer.provider = "google"
     mock_ctx.llm_config.explorer.model = "gemini-3.7-flash"
 
     mock_state = MagicMock(spec=State)
@@ -380,6 +390,7 @@ async def test_explorer_initial_visual_marking():
     mock_ctx.data_engine.base_dir = "/tmp/test_session"
     mock_ctx.llm_config = MagicMock()
     mock_ctx.llm_config.explorer = MagicMock()
+    mock_ctx.llm_config.explorer.provider = "google"
     mock_ctx.llm_config.explorer.model = "gemini-3.7-flash"
 
     mock_state = MagicMock(spec=State)
@@ -466,6 +477,7 @@ async def test_explorer_initial_visual_marking_previous_screenshot():
     mock_ctx.data_engine.base_dir = "/tmp/test_session"
     mock_ctx.llm_config = MagicMock()
     mock_ctx.llm_config.explorer = MagicMock()
+    mock_ctx.llm_config.explorer.provider = "google"
     mock_ctx.llm_config.explorer.model = "gemini-3.7-flash"
 
     mock_state = MagicMock(spec=State)
@@ -559,6 +571,7 @@ async def test_explorer_initial_visual_marking_previous_screenshot_no_ui_tree():
     mock_ctx.data_engine.base_dir = "/tmp/test_session"
     mock_ctx.llm_config = MagicMock()
     mock_ctx.llm_config.explorer = MagicMock()
+    mock_ctx.llm_config.explorer.provider = "google"
     mock_ctx.llm_config.explorer.model = "gemini-3.7-flash"
 
     mock_state = MagicMock(spec=State)
@@ -641,6 +654,7 @@ async def test_explorer_initial_visual_marking_previous_screenshot_ocr_fusion():
     mock_ctx.data_engine.base_dir = "/tmp/test_session"
     mock_ctx.llm_config = MagicMock()
     mock_ctx.llm_config.explorer = MagicMock()
+    mock_ctx.llm_config.explorer.provider = "google"
     mock_ctx.llm_config.explorer.model = "gemini-3.7-flash"
 
     mock_state = MagicMock(spec=State)
@@ -743,6 +757,7 @@ async def test_explorer_initial_visual_marking_previous_screenshot_on_the_fly_oc
     mock_ctx.data_engine.base_dir = "/tmp/test_session"
     mock_ctx.llm_config = MagicMock()
     mock_ctx.llm_config.explorer = MagicMock()
+    mock_ctx.llm_config.explorer.provider = "google"
     mock_ctx.llm_config.explorer.model = "gemini-3.7-flash"
 
     mock_state = MagicMock(spec=State)
@@ -857,6 +872,7 @@ async def test_explorer_denylisted_tool():
     mock_ctx.data_engine.base_dir = "/tmp/test_session"
     mock_ctx.llm_config = MagicMock()
     mock_ctx.llm_config.explorer = MagicMock()
+    mock_ctx.llm_config.explorer.provider = "google"
     mock_ctx.llm_config.explorer.model = "gemini-3.7-flash"
     mock_ctx.agent_config = MagicMock()
     mock_ctx.agent_config.denylisted_tools = {"explorer": ["search_xml_ocr"]}
@@ -1050,6 +1066,7 @@ async def test_explorer_final_turn_tool_stripping():
     mock_ctx.data_engine.base_dir = "/tmp/test_session"
     mock_ctx.llm_config = MagicMock()
     mock_ctx.llm_config.explorer = MagicMock()
+    mock_ctx.llm_config.explorer.provider = "google"
     mock_ctx.llm_config.explorer.model = "gemini-3.7-flash"
 
     # A client already shared on the context selects the native engine and is

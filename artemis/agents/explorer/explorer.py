@@ -49,7 +49,7 @@ from artemis.config import settings
 from artemis.context import ArtemisContext
 from artemis.data_engine.trace import trace
 from artemis.graph.state import State
-from artemis.llm.google import is_gemini_model, strip_provider_prefix
+from artemis.llm.google import is_gemini_model, is_google_provider, strip_provider_prefix
 from artemis.utils.ocr_api import is_ocr_configured
 from third_party.mobile_use.utils.logger import get_logger
 
@@ -124,10 +124,13 @@ class Explorer(PerceptionToolsMixin, UniversalRunnerMixin, RunSetupMixin, Native
     def _detect_native_engine(self) -> bool:
         """True when the native google-genai SDK should drive the reasoning loop.
 
-        A Gemini model alone is not enough: without a Google API key (or a
-        client already shared on the context) the SDK cannot be constructed,
-        so such configurations run through the universal LangChain engine.
+        Native Gemini requires a Google endpoint, a compatible model, and
+        either a Google API key or a client already shared on the context.
         """
+        llm_config = getattr(self.ctx, "llm_config", None)
+        llm_cfg = getattr(llm_config, "explorer", None) if llm_config else None
+        if not is_google_provider(getattr(llm_cfg, "provider", "google")):
+            return False
         if not is_gemini_model(self.model_name):
             return False
         if getattr(self.ctx, "_genai_client", None) is not None:

@@ -27,9 +27,16 @@ from artemis.agents.video_analyzer.chunk_conversation import (
     _run_native_chunk_conversation,
 )
 from artemis.agents.video_analyzer.video_analyzer import VideoAnalyzer
+from artemis.config import settings
+from pydantic import SecretStr
 from artemis.context import ArtemisContext
 from google.genai import types
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def google_credentials(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", SecretStr("synthetic-google-key"))
 
 
 @pytest.mark.asyncio
@@ -39,6 +46,7 @@ async def test_video_analyzer_run():
     mock_ctx.data_engine = None
     mock_ctx.llm_config = MagicMock()
     mock_ctx.llm_config.utils.video_analyzer = MagicMock()
+    mock_ctx.llm_config.utils.video_analyzer.provider = "google"
     mock_ctx.llm_config.utils.video_analyzer.model = "gemini-3.7-flash"
     mock_ctx.agent_config = SimpleNamespace(video_analyzer=SimpleNamespace(processing="static"))
 
@@ -91,6 +99,7 @@ async def test_video_analyzer_preserves_thought_signature():
     mock_ctx.data_engine = None
     mock_ctx.llm_config = MagicMock()
     mock_ctx.llm_config.utils.video_analyzer = MagicMock()
+    mock_ctx.llm_config.utils.video_analyzer.provider = "google"
     mock_ctx.llm_config.utils.video_analyzer.model = "gemini-3.7-flash"
     mock_ctx.agent_config = SimpleNamespace(video_analyzer=SimpleNamespace(processing="static"))
 
@@ -268,6 +277,7 @@ async def test_video_analyzer_sub_agent_confidence_validation():
     mock_ctx.data_engine = None
     mock_ctx.llm_config = MagicMock()
     mock_ctx.llm_config.utils.video_analyzer = MagicMock()
+    mock_ctx.llm_config.utils.video_analyzer.provider = "google"
     mock_ctx.llm_config.utils.video_analyzer.model = "gemini-3.7-flash"
     mock_ctx.agent_config = SimpleNamespace(video_analyzer=SimpleNamespace(processing="static"))
 

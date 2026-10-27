@@ -70,6 +70,7 @@ from artemis.controllers.controller_factory import get_controller
 from artemis.data_engine.trace import CURRENT_TRACE_ID, TraceSpan, trace
 from artemis.llm.google import (
     is_gemini_model,
+    is_google_provider,
     resolve_video_processing,
     strip_provider_prefix,
 )
@@ -425,11 +426,13 @@ class VideoAnalyzer:
             settings.GOOGLE_API_KEY and settings.GOOGLE_API_KEY.get_secret_value()
         )
 
-        # If client is already set on ctx or explicit Gemini configuration
-        self.client = getattr(ctx, "_genai_client", None)
+        native_endpoint = is_google_provider(
+            getattr(llm_cfg, "provider", "google")
+        ) and is_gemini_model(self.model_name)
+        self.client = getattr(ctx, "_genai_client", None) if native_endpoint else None
         if self.client is not None:
             self.use_native_gemini = True
-        elif has_google_key and is_gemini_model(self.model_name):
+        elif native_endpoint and has_google_key:
             try:
                 self.client = genai.Client(api_key=settings.GOOGLE_API_KEY.get_secret_value())
                 ctx._genai_client = self.client
