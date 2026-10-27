@@ -83,7 +83,7 @@ async def probe(output: Path):
     from scripts.magpie_local import configure_magpie_runtime
 
     os.environ["ARTEMIS_CODEX_STATE_DIR"] = str(output / "runtime")
-    configure_magpie_runtime()
+    configure_magpie_runtime(profile_name="magpie-sol.jsonc")
     import httpx2
     from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
     from PIL import Image, ImageDraw

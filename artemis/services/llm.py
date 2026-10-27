@@ -943,16 +943,17 @@ def _resolve_endpoint(
 
 
 def get_memory_llm(ctx=None, model_name: str | None = None, *, use_fallback=False):
-    """Honor Codex/Responses routing; preserve other legacy memory defaults."""
+    """Honor Codex/Responses/Magpie routing; preserve other legacy memory defaults."""
     ctx = ctx if ctx is not None else SimpleNamespace(llm_config=get_default_llm_config())
     config = getattr(ctx, "llm_config", None)
     if config is None:
         config = get_default_llm_config()
         ctx.llm_config = config
     summarizer = getattr(config, "summarizer", None)
-    if getattr(summarizer, "provider", None) != "codex" and not getattr(
-        summarizer, "use_responses_api", False
-    ):
+    if not (
+        getattr(summarizer, "provider", None) == "codex"
+        or str(getattr(summarizer, "model", "")).startswith(("workbuddy/", "ca/"))
+    ) and not getattr(summarizer, "use_responses_api", False):
         return get_google_llm(model_name=model_name or "gemini-3.8-flash", temperature=0.0)
     endpoint = _resolve_endpoint(ctx, "summarizer", use_fallback=use_fallback)
     updates = {"temperature": 0.0}

@@ -1,0 +1,76 @@
+{
+  "default": {
+    "provider": "openai",
+    "model": "ca/7670:deepseek-v4.1-flash",
+    "use_responses_api": false,
+    "timeout": 180,
+    "fallback": {
+      "provider": "openai",
+      "model": "ca/7670:deepseek-v4.1-flash",
+      "use_responses_api": false
+    }
+  },
+  "nodes": {
+    "validator_pixel_safety_net": {
+      "provider": "openai",
+      "model": "ca/7670:deepseek-v4.1-flash",
+      "use_responses_api": false,
+      "timeout": 180,
+      "fallback": {
+        "provider": "openai",
+        "model": "ca/7670:deepseek-v4.1-flash",
+        "use_responses_api": false
+      }
+    },
+    "planner_validation": {
+      "provider": "openai",
+      "model": "ca/7670:deepseek-v4.1-flash",
+      "use_responses_api": false,
+      "timeout": 180,
+      "fallback": {
+        "provider": "openai",
+        "model": "ca/7670:deepseek-v4.1-flash",
+        "use_responses_api": false
+      }
+    }
+  },
+  "agent": {
+    "flash": {
+      "max_turns": 12,
+      "explorer_mode": "pro",
+      "step_summarizer": {
+        "enabled": true,
+        "model": "ca/7670:deepseek-v4.1-flash"
+      }
+    },
+    "pro": {
+      "explorer": {
+        "mode": "pro"
+      },
+      "video_analyzer": {
+        "enabled": false
+      }
+    },
+    "memory": {
+      "chunking": {
+        "model": "ca/7670:deepseek-v4.1-flash"
+      }
+    },
+    "video_analyzer": {
+      "enabled": false,
+      "enable_ledger": false
+    },
+    "explorer": {
+      "default_version": "pro",
+      "caching": false
+    },
+    "denylisted_tools": {
+      "explorer": [
+        "ask_perception_tool",
+        "detect_objects",
+        "get_ocr_list",
+        "ask_image_processor"
+      ]
+    }
+  }
+}

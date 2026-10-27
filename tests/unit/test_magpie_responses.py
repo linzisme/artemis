@@ -128,8 +128,55 @@ print(json.dumps({
     assert json.loads(result.stdout.splitlines()[-1]) == {
         "base_url": "http://127.0.0.1:3425/v1",
         "key_is_loopback_placeholder": True,
-        "model": "codex/gpt-6.1-sol",
-        "responses": True,
+        "model": "ca/7670:deepseek-v4.1-flash",
+        "responses": False,
         "proxies_present": False,
         "fake_llm": None,
     }
+
+
+@pytest.mark.parametrize(
+    "profile_name,target",
+    [
+        ("magpie-workbuddy.jsonc", "workbuddy/deepseek-v4.1-flash"),
+        ("magpie-ca.jsonc", "ca/7670:deepseek-v4.1-flash"),
+    ],
+)
+def test_magpie_chat_routes_roles_memory_and_visual_without_google(
+    context, monkeypatch, profile_name, target
+):
+    from artemis.agents.flash import runner
+    from artemis.agents.flash.summarizer import VisualStepSummarizer
+    from artemis.memory.chunking import StepCapsuleLens
+
+    profile = Path(__file__).resolve().parents[2] / "config" / profile_name
+    with profile.open() as stream:
+        context.llm_config = LLMConfig.model_validate(
+            _expand_default_into_nodes(load_jsonc(stream))
+        )
+    roles = [(name, False) for name in LLMConfig.model_fields if name != "utils"]
+    roles += [(name, True) for name in type(context.llm_config.utils).model_fields]
+    for fallback in (False, True):
+        for name, is_utils in roles:
+            ep = _resolve_endpoint(context, name, is_utils=is_utils, use_fallback=fallback)
+            assert ep.model_name == target
+            assert ep.provider.value == "openai"
+            assert not ep.use_responses_api
+        models = [
+            get_memory_llm(context, use_fallback=fallback),
+            VisualStepSummarizer(context, target)._llm,
+            StepCapsuleLens(target, ctx=context)._get_llm(),
+        ]
+        for model in models:
+            assert isinstance(model, ChatOpenAI)
+            payload = model._get_request_payload([HumanMessage(content="synthetic request")])
+            assert payload["model"] == target
+            assert "messages" in payload and "input" not in payload
+            assert "service_tier" not in payload
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError("WorkBuddy unavailable")
+
+    monkeypatch.setattr(runner, "get_llm", unavailable)
+    with pytest.raises(RuntimeError, match="WorkBuddy unavailable"):
+        runner.FlashRunner._init_llm(SimpleNamespace(ctx=context))

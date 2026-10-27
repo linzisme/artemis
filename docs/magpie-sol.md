@@ -1,5 +1,11 @@
 # Magpie Sol 通道试用（2026-10-25）
 
+> 2026-10-25 更新：当前默认入口已按用户最新要求切到 `config/magpie-ca.jsonc`，使用 `ca/7670:deepseek-v4.1-flash`、Chat Completions。主模型、辅助角色、摘要、memory 和 fallback 均采用该模型；运行数据沿用原目录。下文为 Sol 配置和历史验证记录。Sol 探针显式加载 `magpie-sol.jsonc`，不受默认入口切换影响。
+>
+> CA 验证：真实文本、合成图片识别、工具调用、模拟工具回执续接及 Checker 均通过；65 项相关单元测试通过，Ruff 与 diff check 通过。没有执行设备动作，尚未进行设备 E2E。证据：`.local-validation/ca-20261025/`。
+>
+> 曾尝试 WorkBuddy，但账号登录失效（401 / refresh token 12153）；用户随后指定改用 CA。`magpie-workbuddy.jsonc` 保留为备选配置，当前不启用。
+
 用户最新确认：改走 Magpie HTTP，继续使用同一 Sol 模型；允许 Magpie 的 Codex 通道继续使用其已登录账号。此切换替换 ARTEMIS 的逐次 Codex CLI 调用方式，不承诺绕开 ChatGPT 订阅额度。
 
 ## 当前配置
