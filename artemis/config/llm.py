@@ -132,6 +132,16 @@ class LLMConfig(LLMConfigBase):
         return val
 
 
+def _replace_inherited_fallback(node: dict, override: dict, previous_provider: Any) -> None:
+    """A provider switch is not consent to keep the previous provider as fallback."""
+    if (
+        "provider" in override
+        and override["provider"] != previous_provider
+        and "fallback" not in override
+    ):
+        node["fallback"] = {key: value for key, value in node.items() if key in LLM.model_fields}
+
+
 def _expand_default_into_nodes(config_dict: dict) -> dict:
     """Expand unified config format with 'default' and 'nodes' into full LLMConfig schema."""
     if "planner" in config_dict and "utils" in config_dict:
@@ -182,6 +192,9 @@ def _expand_default_into_nodes(config_dict: dict) -> dict:
                     node_cfg[k] = {**node_cfg[k], **v}
                 else:
                     node_cfg[k] = v
+        _replace_inherited_fallback(
+            node_cfg, nodes_override.get(node, {}), default_model_cfg.get("provider")
+        )
         result[node] = node_cfg
 
     utils_dict: dict[str, Any] = {}
@@ -193,6 +206,9 @@ def _expand_default_into_nodes(config_dict: dict) -> dict:
                     util_cfg[k] = {**util_cfg[k], **v}
                 else:
                     util_cfg[k] = v
+        _replace_inherited_fallback(
+            util_cfg, nodes_override.get(util, {}), default_model_cfg.get("provider")
+        )
         utils_dict[util] = util_cfg
     result["utils"] = utils_dict
 
@@ -210,6 +226,9 @@ def _expand_default_into_nodes(config_dict: dict) -> dict:
             or node in nodes_override
         ):
             result[node] = {**default_model_cfg, **nodes_override.get(node, {})}
+            _replace_inherited_fallback(
+                result[node], nodes_override.get(node, {}), default_model_cfg.get("provider")
+            )
 
     return result
 
@@ -253,8 +272,13 @@ def deep_merge_llm_config(base: LLMConfig, overrides: dict) -> LLMConfig:
 
     def merge(d1: dict, d2: dict) -> None:
         for k, v in d2.items():
-            if k in d1 and isinstance(d1[k], dict) and isinstance(v, dict):
+            if isinstance(v, dict):
+                previous = d1.get(k) if isinstance(d1.get(k), dict) else {}
+                previous_provider = previous.get("provider")
+                d1[k] = dict(previous)
                 merge(d1[k], v)
+                if k != "fallback":
+                    _replace_inherited_fallback(d1[k], v, previous_provider)
             else:
                 d1[k] = v
 

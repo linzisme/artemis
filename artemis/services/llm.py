@@ -580,10 +580,15 @@ class RobustChatModelWrapper:
         else:
             # Google built-ins are provider-executed, not ARTEMIS tools.
             google_builtins = {
-                "google_search", "google_search_retrieval", "google_maps", "code_execution"
+                "google_search",
+                "google_search_retrieval",
+                "google_maps",
+                "code_execution",
             }
             processed_tools = [
-                t for t in processed_tools if not (isinstance(t, dict) and google_builtins.intersection(t))
+                t
+                for t in processed_tools
+                if not (isinstance(t, dict) and google_builtins.intersection(t))
             ]
             kwargs.pop("tool_config", None)
 

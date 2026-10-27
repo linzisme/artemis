@@ -27,17 +27,13 @@ from artemis.agents.validator.tool_declarations import (
     ToolExecutionResult,
 )
 from artemis.context import ArtemisContext
+from artemis.config.llm import LLMConfig, _expand_default_into_nodes
 
 
 @pytest.fixture
 def mock_context():
     ctx = Mock(spec=ArtemisContext)
-    ctx.llm_config = Mock()
-    mock_llm_cfg = Mock()
-    mock_llm_cfg.model = "gemini-2.5-flash"
-    mock_llm_cfg.temperature = 0.1
-    ctx.llm_config.get_agent.return_value = mock_llm_cfg
-
+    ctx.llm_config = LLMConfig.model_validate(_expand_default_into_nodes({}))
     ctx.device = Mock()
     ctx.device.device_width = 1080
     ctx.device.device_height = 2400
