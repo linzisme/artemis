@@ -16,6 +16,8 @@
 
 Run from checkout: PYTHONPATH=. python scripts/probe_codex_subscription.py --live
 Requires existing CLI ChatGPT login. Makes several real model calls.
+Use --cache-only to report the related-call cache check independently of optional
+parallel-tool support. Zero observed hits are reported explicitly as unsupported.
 """
 
 import argparse
@@ -40,7 +42,48 @@ from artemis.mcp.action_specs import operator_shell_tool
 from artemis.services.llm import RobustChatModelWrapper
 
 
-async def probe(model_name, reasoning_effort="medium", service_tier="fast"):
+async def probe_related_calls(model: CodexChatModel):
+    """Measure reported cache usage on appended history; never infer hits from reuse."""
+    prefix = (
+        "Synthetic cache fixture. Do not execute tools or actions. "
+        "For each request reply only CACHE_PROBE_OK. Reference records follow:\n"
+        + "\n".join(
+            f"Record {index:04d}: synthetic blue square; centre 500,500; "
+            "dry-run receipt accepted; no device action performed."
+            for index in range(256)
+        )
+    )
+    messages = [SystemMessage(content=prefix), HumanMessage(content="Acknowledge record 0000.")]
+    calls = []
+    for turn in range(3):
+        start = time.monotonic()
+        response = await model.ainvoke(messages)
+        calls.append(
+            {"seconds": round(time.monotonic() - start, 2), "usage": response.usage_metadata}
+        )
+        messages.extend(
+            [response, HumanMessage(content=f"Acknowledge record {turn + 1:04d} as well.")]
+        )
+    later_cached = [
+        (call["usage"] or {}).get("input_token_details", {}).get("cache_read", 0)
+        for call in calls[1:]
+    ]
+    hit = any(count > 0 for count in later_cached)
+    return {
+        "status": "passed" if hit else "unsupported",
+        "passed": hit,
+        "reason": (
+            "Cached input reported on appended-history calls."
+            if hit
+            else "Cache reuse was not observed on later calls; caching is unsupported for this "
+            "probe run. This does not establish that the provider never caches."
+        ),
+        "later_cached_input_tokens": later_cached,
+        "calls": calls,
+    }
+
+
+async def probe(model_name, reasoning_effort="medium", service_tier="fast", *, cache_only=False):
     model = ModelFactory.create_model(
         ModelEndpoint(
             provider=ModelProvider.CODEX,
@@ -51,7 +94,17 @@ async def probe(model_name, reasoning_effort="medium", service_tier="fast"):
         )
     )
     assert isinstance(model, CodexChatModel), "Fake models must not be used in the live probe"
-    result = {}
+    result = {"related_call_cache": await probe_related_calls(model)}
+    probe_report = {
+        "model": model_name,
+        "reasoning_effort": reasoning_effort,
+        "requested_service_tier": service_tier,
+        "auth": "chatgpt",
+        "device_actions_executed": False,
+        "checks": result,
+    }
+    if cache_only:
+        return probe_report
 
     async def measure(name, call):
         start = time.monotonic()
@@ -180,19 +233,15 @@ async def probe(model_name, reasoning_effort="medium", service_tier="fast"):
     candidates = json.loads(answer)["candidates"]
     assert candidates and all(abs(v - 500) <= 50 for v in candidates[0]["coords"])
     result["explorer_universal_loop"]["coords"] = candidates[0]["coords"]
-    return {
-        "model": model_name,
-        "reasoning_effort": reasoning_effort,
-        "requested_service_tier": service_tier,
-        "auth": "chatgpt",
-        "device_actions_executed": False,
-        "checks": result,
-    }
+    return probe_report
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live", action="store_true", help="Allow real subscription calls")
+    parser.add_argument(
+        "--cache-only", action="store_true", help="Only probe related-call cache usage"
+    )
     parser.add_argument("--model", default="gpt-6.1-sol")
     parser.add_argument("--reasoning-effort", default="medium")
     parser.add_argument("--service-tier", choices=("fast", "priority"), default="fast")
@@ -201,6 +250,11 @@ if __name__ == "__main__":
         parser.error("Pass --live to explicitly allow subscription calls")
     print(
         json.dumps(
-            asyncio.run(probe(args.model, args.reasoning_effort, args.service_tier)), indent=2
+            asyncio.run(
+                probe(
+                    args.model, args.reasoning_effort, args.service_tier, cache_only=args.cache_only
+                )
+            ),
+            indent=2,
         )
     )

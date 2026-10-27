@@ -69,6 +69,7 @@ def _context(model: str = "gemini-3.8-flash", **video_cfg) -> MagicMock:
     )
     ctx.device = SimpleNamespace(device_id="agentic-device")
     ctx.llm_config = MagicMock()
+    ctx.llm_config.utils.video_analyzer.provider = "google"
     ctx.llm_config.utils.video_analyzer.model = model
     ctx.llm_config.utils.video_analyzer.temperature = 0.2
     return ctx
