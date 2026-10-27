@@ -1,6 +1,10 @@
 # Projects 本地订阅版：使用与迁移
 
-## 2026-10-25 当前入口改为 Magpie
+## 2026-10-27 当前模型为 Magpie Terra Medium
+
+默认入口仍为 `scripts/magpie_local.py`，加载 `config/magpie-terra.jsonc`，模型为 `codex/gpt-6.1-terra`、Responses API、Medium。8000 服务已在空闲且队列为空时重启，状态接口确认新模型生效；运行数据沿用 `.codex-artemis-state/`。推荐依据、真实合成协议验证及限制见 [Magpie 通道记录](magpie-sol.md)。以下为历史配置和迁移记录。
+
+## 2026-10-25 入口改为 Magpie
 
 用户确认改走 Magpie HTTP、继续使用同一 Sol 模型。8000 和默认启动脚本已切到 `scripts/magpie_local.py`，运行数据仍沿用 `.codex-artemis-state/`。参数、验证、Fast 实际档位未确认及双工具调用限制见 [Magpie 通道试用记录](magpie-sol.md)。以下保留此前直接 Codex CLI 方案的配置和回退记录。
 

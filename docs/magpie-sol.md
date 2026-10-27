@@ -1,6 +1,26 @@
 # Magpie Sol 通道试用（2026-10-25）
 
-> 2026-10-25 更新：当前默认入口已按用户最新要求切到 `config/magpie-ca.jsonc`，使用 `ca/7670:deepseek-v4.1-flash`、Chat Completions。主模型、辅助角色、摘要、memory 和 fallback 均采用该模型；运行数据沿用原目录。下文为 Sol 配置和历史验证记录。Sol 探针显式加载 `magpie-sol.jsonc`，不受默认入口切换影响。
+## 当前默认：Terra Medium（2026-10-27）
+
+默认入口 `scripts/magpie_local.py` 改为加载 `config/magpie-terra.jsonc`：通过 Magpie `http://127.0.0.1:3425/v1/responses` 使用 `codex/gpt-6.1-terra`，主角色、辅助角色、视觉摘要、memory 和 fallback 均设为 `reasoning.effort=medium`。保留原运行数据目录，不请求额外的 `service_tier`。CA、WorkBuddy 和 Sol 配置保留，可显式加载。
+
+推荐 Medium 作为当前界面回归的起点：任务以截图定位、按步骤执行、检查断言和整理观察结果为主，需要兼顾操作准确率与每轮等待时间。[官方指南](https://developers.openai.com/api/docs/guides/latest-model)建议 Terra 从 Medium 起步，仅在质量收益值得额外时间和 token 时提高等级；[Terra 模型说明](https://developers.openai.com/api/docs/models/gpt-6.1-terra)要求工具调用使用 Responses API。High 可用于后续困难定位、复杂断言或恢复流程的对照评估；目前没有真实设备 Medium/High 对照数据，不能声称 Medium 已被证明最优。
+
+本机 Magpie 模型列表确认 `codex/gpt-6.1-terra` 支持 text/image、原生 `/v1/responses` 和 Medium。网关发布的 context window 为 500,000，与官方模型页的 1,050,000 不同；实际接入以网关限制为准。网关列出的推理等级也与官方不完全一致，本次只采用双方均支持的 Medium。
+
+真实合成协议探针 9 项通过、1 项失败：文本、图片识别、逐步第二个工具调用、模拟工具回执续接、Checker、Hopper、Explorer 坐标、缓存首轮和缓存续接均通过；同一响应双工具调用只返回第一个，失败项保留，`all_checks_passed=false`、退出码 1。请求审计确认 10 次请求均为 Terra、Medium、Responses、`store=false`，未指定 service tier，模型响应为 `gpt-6.1-terra` / `default`。缓存追加轮 7,374 输入 token 中命中 7,168；该合成样本不能代替设备流程的命中率和延迟评估。证据：`.local-validation/terra-20261027/probe.json`。44 项相关单元测试及 Ruff、diff check 通过；未运行真实设备 E2E。
+
+8000 服务切换前复核为 idle、queue 和 active_tasks 均为空，重启后 `/api/status` 确认模型为 `codex/gpt-6.1-terra`，仍为空闲、空队列；保留 `.codex-artemis-state/` 数据目录。切换记录：`.local-validation/terra-20261027/service-switch.json`。
+
+复现 Terra 合成数据协议探针（不执行设备动作）：
+
+```bash
+.venv/bin/python scripts/probe_magpie_responses.py --live --profile magpie-terra.jsonc --output-dir .local-validation/terra-next-probe
+```
+
+## CA 与 Sol 历史记录
+
+> 2026-10-25 更新：当时默认入口切到 `config/magpie-ca.jsonc`，使用 `ca/7670:deepseek-v4.1-flash`、Chat Completions。主模型、辅助角色、摘要、memory 和 fallback 均采用该模型；运行数据沿用原目录。下文为 Sol 配置和历史验证记录。Sol 探针默认显式加载 `magpie-sol.jsonc`，不受默认入口切换影响。
 >
 > CA 验证：真实文本、合成图片识别、工具调用、模拟工具回执续接及 Checker 均通过；65 项相关单元测试通过，Ruff 与 diff check 通过。没有执行设备动作，尚未进行设备 E2E。证据：`.local-validation/ca-20261025/`。
 >

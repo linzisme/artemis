@@ -1,0 +1,35 @@
+{
+  // Start at Medium for UI regression; raise effort only after measured failures.
+  // Tool calling uses Responses. No service tier is requested.
+  "default": {
+    "provider": "openai",
+    "model": "codex/gpt-6.1-terra",
+    "use_responses_api": true,
+    "reasoning_effort": "medium",
+    "timeout": 180,
+    "fallback": {
+      "provider": "openai",
+      "model": "codex/gpt-6.1-terra",
+      "use_responses_api": true,
+      "reasoning_effort": "medium"
+    }
+  },
+  "nodes": {},
+  "agent": {
+    "flash": {
+      "max_turns": 12,
+      "explorer_mode": "pro",
+      "step_summarizer": { "enabled": true, "model": "codex/gpt-6.1-terra" }
+    },
+    "pro": {
+      "explorer": { "mode": "pro" },
+      "video_analyzer": { "enabled": false }
+    },
+    "memory": { "chunking": { "model": "codex/gpt-6.1-terra" } },
+    "video_analyzer": { "enabled": false, "enable_ledger": false },
+    "explorer": { "default_version": "pro", "caching": false },
+    "denylisted_tools": {
+      "explorer": ["ask_perception_tool", "detect_objects", "get_ocr_list", "ask_image_processor"]
+    }
+  }
+}

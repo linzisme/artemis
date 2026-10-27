@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.codex_local import configure_local_runtime
 
 
-def configure_magpie_runtime(*, profile_name: str = "magpie-ca.jsonc") -> Path:
+def configure_magpie_runtime(*, profile_name: str = "magpie-terra.jsonc") -> Path:
     # Only this process talks to loopback; Magpie manages its upstream transport.
     for name in (
         "HTTP_PROXY",

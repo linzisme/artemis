@@ -79,11 +79,11 @@ async def check_result(report, name, call, validate, *, fatal=True):
     return value
 
 
-async def probe(output: Path):
+async def probe(output: Path, *, profile_name: str = "magpie-sol.jsonc"):
     from scripts.magpie_local import configure_magpie_runtime
 
     os.environ["ARTEMIS_CODEX_STATE_DIR"] = str(output / "runtime")
-    configure_magpie_runtime(profile_name="magpie-sol.jsonc")
+    configure_magpie_runtime(profile_name=profile_name)
     import httpx2
     from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
     from PIL import Image, ImageDraw
@@ -96,11 +96,16 @@ async def probe(output: Path):
     from artemis.services.llm import RobustChatModelWrapper, _resolve_endpoint
     from third_party.mobile_use.agents.hopper.hopper import HopperOutput
 
+    config = get_default_llm_config()
+    ctx = SimpleNamespace(llm_config=config, data_engine=None)
+    endpoint = _resolve_endpoint(ctx, "operator")
+    assert endpoint.use_responses_api, "This probe requires a Responses profile"
     report = {
-        "model": "codex/gpt-6.1-sol",
+        "profile": profile_name,
+        "model": endpoint.model_name,
         "base_url": "http://127.0.0.1:3425/v1",
-        "reasoning_effort": "medium",
-        "requested_service_tier": "priority",
+        "reasoning_effort": endpoint.reasoning_effort,
+        "requested_service_tier": endpoint.service_tier,
         "device_actions_executed": False,
         "completed": False,
         "all_checks_passed": False,
@@ -114,24 +119,22 @@ async def probe(output: Path):
             body = json.loads(request.content)
             assert str(request.url).startswith(report["base_url"] + "/responses")
             assert body.get("model") == report["model"]
-            assert body.get("reasoning", {}).get("effort") == "medium"
-            assert body.get("service_tier") == "priority"
+            assert body.get("reasoning", {}).get("effort") == report["reasoning_effort"]
+            assert body.get("service_tier") == report["requested_service_tier"]
             assert body.get("store") is False
             report["requests"].append(
                 {
                     "path": request.url.path,
                     "model": body["model"],
                     "reasoning": body["reasoning"],
-                    "service_tier": body["service_tier"],
+                    "service_tier": body.get("service_tier"),
                     "stream": body.get("stream"),
                     "input_items": len(body.get("input", [])),
                 }
             )
         return await original_send(client, request, *args, **kwargs)
 
-    config = get_default_llm_config()
-    ctx = SimpleNamespace(llm_config=config, data_engine=None)
-    model = ModelFactory.create_model(_resolve_endpoint(ctx, "operator"))
+    model = ModelFactory.create_model(endpoint)
 
     check = partial(check_result, report)
 
@@ -311,11 +314,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--profile",
+        choices=("magpie-sol.jsonc", "magpie-terra.jsonc"),
+        default="magpie-sol.jsonc",
+    )
     args = parser.parse_args()
     if not args.live:
         parser.error("Pass --live to allow real Magpie model calls")
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    result = asyncio.run(asyncio.wait_for(probe(output), timeout=1200))
+    result = asyncio.run(
+        asyncio.wait_for(probe(output, profile_name=args.profile), timeout=1200)
+    )
     print(json.dumps(result, indent=2))
     sys.exit(0 if result["all_checks_passed"] else 1)
